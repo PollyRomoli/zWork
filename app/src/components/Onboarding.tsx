@@ -400,6 +400,7 @@ export function Onboarding() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (finalizing) return;
+      if (e.defaultPrevented) return;
       if (e.key === "Enter" && !e.shiftKey) {
         const active = document.activeElement as HTMLElement | null;
         if (active?.tagName === "TEXTAREA") return;
@@ -441,7 +442,7 @@ export function Onboarding() {
   return (
     <div
       ref={rootRef}
-      className="relative flex h-full min-h-screen min-w-0 flex-1 flex-col bg-paper overflow-hidden"
+      className="onboarding-shell relative flex h-full min-h-screen min-w-0 flex-1 flex-col overflow-hidden bg-paper"
     >
       {/* Dithered wave background — full-bleed, theme-aware. */}
       <div className="pointer-events-none absolute inset-0 z-0">
@@ -496,7 +497,7 @@ export function Onboarding() {
         >
           {/* Card header: logo left, progress dots right. */}
           <div className="flex flex-shrink-0 items-center justify-between border-b border-line/70 px-7 py-4 md:px-9">
-            <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2">
               <Logo size={20} />
               <span className="text-[13.5px] font-semibold tracking-tight text-ink">
                 <span className="lowercase">z</span>Work
@@ -692,16 +693,16 @@ function OnboardingVisual() {
   }, []);
 
   return (
-    <div className="flex flex-col items-center justify-center gap-6">
-      <div className="logo-hover-trigger">
-        <span className="logo-spin-target inline-flex">
-          <Logo size={80} className="text-ink" />
+    <div className="flex flex-col items-center justify-center gap-8">
+      <div className="logo-hover-trigger rounded-3xl p-4">
+        <span className="logo-spin-target inline-flex will-change-transform">
+          <Logo size={90} className="text-ink" />
         </span>
       </div>
-      <div className="flex items-center text-3xl md:text-4xl lg:text-5xl font-medium tracking-tight text-ink">
-        <span>Your agent for&nbsp;&nbsp;&nbsp;</span>
-        <div className="relative overflow-hidden h-[1.2em] flex items-center">
-          <span className="invisible italic font-serif select-none pointer-events-none">
+      <div className="flex items-baseline gap-[0.045em] text-4xl tracking-tight text-ink md:text-5xl lg:text-6xl">
+        <span>Your agent for</span>
+        <div className="relative -mx-[0.08em] flex h-[1.18em] items-center overflow-hidden px-[0.08em] leading-none">
+          <span className="invisible italic select-none pointer-events-none">
             getting unstuck
           </span>
           <AnimatePresence mode="popLayout">
@@ -711,7 +712,7 @@ function OnboardingVisual() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: "-100%", opacity: 0 }}
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
-              className="absolute left-0 italic font-serif whitespace-nowrap"
+              className="absolute left-0 italic whitespace-nowrap"
             >
               {ROTATING_WORDS[index]}
             </motion.span>
@@ -747,6 +748,7 @@ function TextInput({
       onKeyDown={(e) => {
         if (e.key === "Enter") {
           e.preventDefault();
+          e.stopPropagation();
           onSubmit();
         }
       }}
@@ -1208,7 +1210,7 @@ function FinalizingScreen({ done }: { done: boolean }) {
   const label = done ? "Done." : FINALIZING_PHASES[idx];
 
   return (
-    <div className="flex h-full min-h-screen w-full items-center justify-center bg-paper">
+    <div className="onboarding-shell flex h-full min-h-screen w-full items-center justify-center bg-paper">
       <motion.span
         key={label}
         initial={{ opacity: 0, y: 6 }}
@@ -1237,7 +1239,7 @@ function OllamaHelpSheet({ onClose }: { onClose: () => void }) {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
+      className="onboarding-shell fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-6"
       onClick={onClose}
     >
       <motion.div

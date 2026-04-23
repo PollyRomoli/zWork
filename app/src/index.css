@@ -186,6 +186,20 @@ textarea {
 }
 
 /* --------------------------------------------------------
+   Onboarding uses a single, editorial type voice throughout.
+   -------------------------------------------------------- */
+.onboarding-shell,
+.onboarding-shell * {
+  font-family:
+    "Instrument Serif",
+    ui-serif,
+    Georgia,
+    "Iowan Old Style",
+    "Times New Roman",
+    serif;
+}
+
+/* --------------------------------------------------------
    Shimmer + thinking-text
    -------------------------------------------------------- */
 @keyframes shimmer-slide {
