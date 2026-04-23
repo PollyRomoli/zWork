@@ -1,0 +1,52 @@
+# ===== Operating system =====
+.DS_Store
+Thumbs.db
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+
+# ===== Node / frontend =====
+node_modules/
+app/dist/
+app/dist-types/
+app/*.tsbuildinfo
+app/workspace/
+
+# ===== Rust / Tauri =====
+app/src-tauri/target/
+app/src-tauri/gen/
+
+# ===== zWork runtime state =====
+.sidecar/
+.zwork/
+# The onboarding-generated personalization file; regenerated per user.
+zwork.md
+user.md
+memory.md
+benchmark-sandbox/
+
+# ===== Editor / IDE =====
+.vscode/
+.idea/
+.codex
+.codex/
+*.swp
+*.swo
+
+# ===== Secrets =====
+.env
+.env.*
+!.env.example
+
+# ===== Scratch projects (generated during testing) =====
+portfolio-demo/
+todo-app/
+bench/
+intro-page/
