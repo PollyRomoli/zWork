@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import appPackage from "../package.json";
 import { Sidebar } from "./components/Sidebar";
 import { Landing } from "./components/Landing";
@@ -9,11 +9,11 @@ import { Onboarding } from "./components/Onboarding";
 import { ProjectView } from "./components/ProjectView";
 import { ArtifactPanel } from "./components/ArtifactPanel";
 import { useApp } from "./lib/store";
+import { detectUpdate, installUpdate } from "./lib/update";
 import { cn } from "./lib/cn";
 
 export default function App() {
   const appVersion = appPackage.version;
-  const releaseRepo = "https://api.github.com/repos/Ryz3nPlayZ/zWork/releases/latest";
   const bootstrap = useApp((s) => s.bootstrap);
   const view = useApp((s) => s.view);
   const active = useApp((s) => s.activeChatId);
@@ -24,40 +24,23 @@ export default function App() {
   const setView = useApp((s) => s.setView);
   const setSearchOpen = useApp((s) => s.setSearchOpen);
   const onboardingDone = useApp((s) => s.onboardingDone);
-  const [updateCard, setUpdateCard] = useState<{ latestVersion: string; releaseUrl: string } | null>(null);
+  const [updateCard, setUpdateCard] = useState<{ latestVersion: string; releaseUrl: string; source: "updater" | "github" } | null>(null);
+  const [updateBusy, setUpdateBusy] = useState(false);
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
 
-  const currentVersionParts = useMemo(() => parseVersion(appVersion), [appVersion]);
-
   useEffect(() => {
     let cancelled = false;
 
     async function checkForUpdates() {
-      try {
-        const r = await fetch(releaseRepo, {
-          headers: { accept: "application/vnd.github+json" },
-        });
-        if (!r.ok) return;
-        const data = (await r.json()) as { tag_name?: string; html_url?: string };
-        const latestTag = (data.tag_name || "").trim();
-        const latestVersion = normalizeVersion(latestTag);
-        if (!latestVersion) return;
+      const detected = await detectUpdate(appVersion);
+      if (cancelled || !detected) return;
 
-        const latestParts = parseVersion(latestVersion);
-        if (compareVersions(latestParts, currentVersionParts) <= 0) return;
-
-        const releaseUrl = data.html_url || `https://github.com/Ryz3nPlayZ/zWork/releases/latest`;
-        const dismissed = window.localStorage.getItem("zwork:dismissed-update");
-        if (dismissed === latestVersion) return;
-        if (!cancelled) {
-          setUpdateCard({ latestVersion, releaseUrl });
-        }
-      } catch {
-        /* ignore */
-      }
+      const dismissed = window.localStorage.getItem("zwork:dismissed-update");
+      if (dismissed === detected.latestVersion) return;
+      setUpdateCard(detected);
     }
 
     void checkForUpdates();
@@ -68,7 +51,20 @@ export default function App() {
       cancelled = true;
       window.clearInterval(interval);
     };
-  }, [currentVersionParts]);
+  }, [appVersion]);
+
+  const runUpdate = async () => {
+    if (updateBusy) return;
+    setUpdateBusy(true);
+    try {
+      const installed = await installUpdate();
+      if (!installed && updateCard?.releaseUrl) {
+        window.open(updateCard.releaseUrl, "_blank", "noreferrer");
+      }
+    } finally {
+      setUpdateBusy(false);
+    }
+  };
 
   const dismissUpdate = () => {
     if (updateCard) {
@@ -158,6 +154,8 @@ export default function App() {
                 <Landing
                   particlesExiting={particlesExiting}
                   updateCard={updateCard}
+                  updateBusy={updateBusy}
+                  onUpdate={updateCard ? runUpdate : undefined}
                   onDismissUpdate={updateCard ? dismissUpdate : undefined}
                 />
               </div>
@@ -169,24 +167,4 @@ export default function App() {
       <SearchModal />
     </div>
   );
-}
-
-function normalizeVersion(value: string): string {
-  return value.replace(/^v/i, "").trim();
-}
-
-function parseVersion(value: string): number[] {
-  return normalizeVersion(value)
-    .split(".")
-    .map((part) => Number.parseInt(part.replace(/[^\d].*$/, ""), 10) || 0);
-}
-
-function compareVersions(a: number[], b: number[]): number {
-  const n = Math.max(a.length, b.length);
-  for (let i = 0; i < n; i += 1) {
-    const av = a[i] ?? 0;
-    const bv = b[i] ?? 0;
-    if (av !== bv) return av - bv;
-  }
-  return 0;
 }

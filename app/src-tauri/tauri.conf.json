@@ -32,6 +32,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "externalBin": ["binaries/zwork-backend"],
     "targets": "all",
     "icon": [
@@ -41,5 +42,16 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEU0MzdBMDU3QTNEODJGRUIKUldUckw5aWpWNkEzNU5pYWoxWFFBK2VMekZpNStPRnZKeXdCaFFQTTg1eW5heTZCdXYrY3A0elIK",
+      "endpoints": [
+        "https://github.com/Ryz3nPlayZ/zWork/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

@@ -106,10 +106,43 @@ Suggested names:
 
 - `zWork-linux-x86_64.AppImage`
 - `zWork-linux-aarch64.AppImage`
+- `zWork-linux-x86_64.AppImage.sig`
+- `zWork-linux-aarch64.AppImage.sig`
 - `zWork-macos-x86_64.dmg`
 - `zWork-macos-aarch64.dmg`
+- `zWork-macos-x86_64.app.tar.gz`
+- `zWork-macos-x86_64.app.tar.gz.sig`
+- `zWork-macos-aarch64.app.tar.gz`
+- `zWork-macos-aarch64.app.tar.gz.sig`
 - `zWork-windows-x86_64-setup.exe`
 - `zWork-windows-aarch64-setup.exe`
+- `zWork-windows-x86_64-setup.exe.sig`
+- `zWork-windows-aarch64-setup.exe.sig`
+- `latest.json`
+
+## Automatic updates
+
+zWork uses the Tauri updater plugin and checks GitHub Releases for updates at
+startup and on a background interval.
+
+Release requirements:
+
+- `bundle.createUpdaterArtifacts` must stay enabled in `tauri.conf.json`
+- the updater public key must be committed in `tauri.conf.json`
+- `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` must be
+  set in GitHub Actions secrets for release builds
+- `scripts/generate-updater-manifest.py` writes `dist/latest.json` from the
+  platform updater artifacts and signatures
+
+To create a new keypair:
+
+```bash
+cd app
+npx tauri signer generate --ci -p '' -w /tmp/zwork-updater.key
+```
+
+The homepage update card uses the updater first and falls back to the GitHub
+release page only if the native updater is unavailable.
 
 ## Important constraints
 

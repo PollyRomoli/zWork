@@ -26,6 +26,13 @@ if [[ ${#assets[@]} -eq 0 ]]; then
   exit 1
 fi
 
+python3 "$ROOT_DIR/scripts/generate-updater-manifest.py" --dist dist --tag "$TAG" --repo "${ZWORK_REPO:-Ryz3nPlayZ/zWork}"
+
+assets=()
+while IFS= read -r -d '' file; do
+  assets+=("$file")
+done < <(find dist -maxdepth 1 -type f \( -name '*.tar.gz' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.exe' -o -name '*.sig' -o -name 'latest.json' \) -print0)
+
 gh release create "$TAG" "${assets[@]}" \
   --title "zWork $TAG" \
   --notes "Initial desktop release artifacts for zWork." \

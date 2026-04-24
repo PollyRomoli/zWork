@@ -23,6 +23,7 @@ switch ($Platform) {
         $BUNDLE_DIR = "$ROOT_DIR\app\src-tauri\target\release\bundle\nsis"
         $src = Get-ChildItem "$BUNDLE_DIR\*_x64-setup.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
         $out = "$DIST_DIR\zWork-windows-$ARCH-setup.exe"
+        $sig_out = "$DIST_DIR\zWork-windows-$ARCH-setup.exe.sig"
     }
     default {
         Write-Error "unknown platform: $Platform"
@@ -35,4 +36,7 @@ if (-not $src -or -not (Test-Path $src.FullName)) {
     exit 1
 }
 Copy-Item $src.FullName $out
+if (Test-Path ($src.FullName + ".sig")) {
+    Copy-Item ($src.FullName + ".sig") $sig_out
+}
 Write-Host $out

@@ -7,25 +7,32 @@ on:
 
 jobs:
   build:
+    env:
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
             platform: linux
             build_script: scripts/build-linux-release.sh
-            artifact_pattern: zWork-linux-*.AppImage
           - os: macos-latest
             platform: macos
             build_script: scripts/build-macos-release.sh
-            artifact_pattern: zWork-macos-*.dmg
           - os: windows-latest
             platform: windows
             build_script: scripts/build-windows-release.ps1
-            artifact_pattern: zWork-windows-*-setup.exe
 
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Verify updater signing secret
+        run: |
+          if [ -z "${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+            echo "TAURI_SIGNING_PRIVATE_KEY is missing. Add the updater private key as a GitHub Actions secret."
+            exit 1
+          fi
 
       - name: Setup Node
         uses: actions/setup-node@v4
@@ -63,7 +70,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
-          path: dist/${{ matrix.artifact_pattern }}
+          path: dist/*
 
   release:
     needs: build
@@ -122,6 +129,9 @@ jobs:
           with open('/tmp/release-body.md', 'w') as f:
               f.write(body)
           "
+
+      - name: Build updater manifest
+        run: python3 scripts/generate-updater-manifest.py --dist dist --tag "${{ steps.version.outputs.tag }}" --repo "Ryz3nPlayZ/zWork"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

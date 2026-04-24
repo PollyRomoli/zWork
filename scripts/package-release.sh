@@ -19,16 +19,23 @@ case "$PLATFORM" in
   linux)
     BUNDLE_DIR="$ROOT_DIR/app/src-tauri/target/release/bundle/appimage"
     out="$DIST_DIR/zWork-linux-${ARCH}.AppImage"
+    sig_out="$DIST_DIR/zWork-linux-${ARCH}.AppImage.sig"
     ;;
   macos)
-    BUNDLE_DIR="$ROOT_DIR/app/src-tauri/target/release/bundle/dmg"
-    src="$(find "$BUNDLE_DIR" -maxdepth 1 -name '*.dmg' | head -n 1)"
+    BUNDLE_DIR="$ROOT_DIR/app/src-tauri/target/release/bundle"
+    dmg_dir="$BUNDLE_DIR/dmg"
+    macos_dir="$BUNDLE_DIR/macos"
+    src="$(find "$dmg_dir" -maxdepth 1 -name '*.dmg' | head -n 1)"
     out="$DIST_DIR/zWork-macos-${ARCH}.dmg"
+    updater_src="$(find "$macos_dir" -maxdepth 1 -name '*.app.tar.gz' | head -n 1)"
+    updater_out="$DIST_DIR/zWork-macos-${ARCH}.app.tar.gz"
+    updater_sig_out="$DIST_DIR/zWork-macos-${ARCH}.app.tar.gz.sig"
     ;;
   windows)
     BUNDLE_DIR="$ROOT_DIR/app/src-tauri/target/release/bundle/nsis"
     src="$(find "$BUNDLE_DIR" -maxdepth 1 -name '*_x64-setup.exe' | head -n 1)"
     out="$DIST_DIR/zWork-windows-${ARCH}-setup.exe"
+    sig_out="$DIST_DIR/zWork-windows-${ARCH}-setup.exe.sig"
     ;;
   *)
     echo "unknown platform: $PLATFORM" >&2
@@ -83,6 +90,10 @@ PY
 
   cp "$src" "$out"
   chmod +x "$out" || true
+  sig_src="${src}.sig"
+  if [[ -f "$sig_src" ]]; then
+    cp "$sig_src" "$sig_out"
+  fi
   echo "$out"
   exit 0
 fi
@@ -94,4 +105,19 @@ if [[ -z "${src:-}" || ! -f "$src" ]]; then
 fi
 
 cp "$src" "$out"
+if [[ "$PLATFORM" == "macos" ]]; then
+  if [[ -z "${updater_src:-}" || ! -f "$updater_src" ]]; then
+    echo "updater bundle not found under $macos_dir" >&2
+    exit 1
+  fi
+  cp "$updater_src" "$updater_out"
+  updater_sig_src="${updater_src}.sig"
+  if [[ -f "$updater_sig_src" ]]; then
+    cp "$updater_sig_src" "$updater_sig_out"
+  fi
+fi
+sig_src="${src}.sig"
+if [[ -f "$sig_src" ]]; then
+  cp "$sig_src" "$sig_out"
+fi
 echo "$out"

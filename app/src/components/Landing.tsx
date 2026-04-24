@@ -69,10 +69,14 @@ function pickGreeting(): GreetingOption {
 export function Landing({
   particlesExiting = false,
   updateCard = null,
+  updateBusy = false,
+  onUpdate,
   onDismissUpdate,
 }: {
   particlesExiting?: boolean;
   updateCard?: UpdateCardState | null;
+  updateBusy?: boolean;
+  onUpdate?: () => void | Promise<void>;
   onDismissUpdate?: () => void;
 }) {
   const me = useApp((s) => s.me);
@@ -153,11 +157,18 @@ export function Landing({
                 <div className="flex shrink-0 items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => window.open(updateCard.releaseUrl, "_blank", "noreferrer")}
-                    className="press inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-[12px] font-medium text-paper transition-colors hover:bg-ink-soft"
+                    onClick={() => {
+                      if (onUpdate) {
+                        void onUpdate();
+                        return;
+                      }
+                      window.open(updateCard.releaseUrl, "_blank", "noreferrer");
+                    }}
+                    disabled={updateBusy}
+                    className="press inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-[12px] font-medium text-paper transition-colors hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     <Download className="h-3.5 w-3.5" />
-                    Update
+                    {updateBusy ? "Updating…" : "Update"}
                   </button>
                   {onDismissUpdate && (
                     <button

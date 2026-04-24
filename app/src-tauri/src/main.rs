@@ -5,8 +5,10 @@ use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{Manager, RunEvent};
+use tauri_plugin_process::init as process_init;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
 use tauri_plugin_shell::ShellExt;
+use tauri_plugin_updater::Builder as UpdaterBuilder;
 
 enum BackendChild {
     Packaged(CommandChild),
@@ -216,6 +218,8 @@ fn spawn_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
 fn main() {
     let app = tauri::Builder::default()
         .plugin(tauri_plugin_shell::init())
+        .plugin(process_init())
+        .plugin(UpdaterBuilder::new().build())
         .manage(Backend(Mutex::new(None)))
         .build(tauri::generate_context!())
         .expect("error while building zWork");
