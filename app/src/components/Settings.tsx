@@ -18,14 +18,13 @@ import {
   Sliders,
   Brain,
   FileText,
-  FolderOpen,
 } from "lucide-react";
 import { cn } from "../lib/cn";
 import { useApp } from "../lib/store";
 import { IconButton } from "./IconButton";
-import type { Integration, Project } from "../lib/api";
+import type { Integration } from "../lib/api";
 
-type Section = "general" | "memory" | "personalization" | "projects" | "models" | "integrations";
+type Section = "general" | "memory" | "personalization" | "models" | "integrations";
 
 const SECTION_META: Record<Section, { title: string; description: string; icon: React.ReactNode }> = {
   general: {
@@ -42,11 +41,6 @@ const SECTION_META: Record<Section, { title: string; description: string; icon: 
     title: "Personalization",
     description: "Your zwork.md preferences file.",
     icon: <FileText className="h-4 w-4" />,
-  },
-  projects: {
-    title: "Projects",
-    description: "Organize context and conversations.",
-    icon: <FolderOpen className="h-4 w-4" />,
   },
   models: {
     title: "Models",
@@ -160,7 +154,6 @@ export function SettingsPage() {
             )}
             {section === "memory" && <MemoryPanel />}
             {section === "personalization" && <PersonalizationPanel />}
-            {section === "projects" && <ProjectsPanel />}
           </div>
         </div>
       </div>
@@ -763,126 +756,6 @@ function PersonalizationPanel() {
           </button>
         </div>
       </section>
-    </div>
-  );
-}
-
-// ---------------- Projects ----------------
-
-function ProjectsPanel() {
-  const projects = useApp((s) => s.projects);
-  const refreshProjects = useApp((s) => s.refreshProjects);
-  const createProject = useApp((s) => s.createProject);
-  const deleteProject = useApp((s) => s.deleteProject);
-  const [name, setName] = useState("");
-  const [desc, setDesc] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [_editing, _setEditing] = useState<string | null>(null);
-  void _editing;
-
-  useEffect(() => { void refreshProjects(); }, [refreshProjects]);
-
-  const create = async () => {
-    if (!name.trim()) return;
-    setBusy(true);
-    try {
-      await createProject(name, desc);
-      setName("");
-      setDesc("");
-    } finally { setBusy(false); }
-  };
-
-  const remove = async (id: string) => {
-    await deleteProject(id);
-  };
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h2 className="text-[17px] font-semibold tracking-tight text-ink">Projects</h2>
-        <p className="mt-1 text-[13px] leading-5 text-ink-muted">
-          Organize context and conversations. Each project has its own <code className="font-mono text-[11.5px]">project.md</code>.
-        </p>
-      </div>
-
-      {/* Create form */}
-      <section className="rounded-xl border border-line bg-paper-raised p-4">
-        <h3 className="mb-3 text-[13.5px] font-semibold text-ink">New project</h3>
-        <div className="flex flex-col gap-3">
-          <Field label="Name">
-            <input
-              className="block w-full rounded-lg border border-line bg-paper px-3 py-2 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"
-              placeholder="My app"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void create(); }}
-            />
-          </Field>
-          <Field label="Description (optional)">
-            <input
-              className="block w-full rounded-lg border border-line bg-paper px-3 py-2 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"
-              placeholder="A short description"
-              value={desc}
-              onChange={(e) => setDesc(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") void create(); }}
-            />
-          </Field>
-          <div className="flex justify-end">
-            <button
-              type="button"
-              disabled={busy || !name.trim()}
-              onClick={() => void create()}
-              className="press inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12.5px] font-medium text-paper hover:bg-ink-soft disabled:opacity-40 disabled:cursor-not-allowed"
-            >
-              <Plus className="h-3.5 w-3.5" /> Create
-            </button>
-          </div>
-        </div>
-      </section>
-
-      {/* Project list */}
-      {projects.length === 0 && (
-        <div className="rounded-xl border border-dashed border-line bg-paper p-6 text-center">
-          <p className="text-[13px] font-medium text-ink">No projects yet</p>
-          <p className="mt-1 text-[12.5px] text-ink-muted">Create one above to get started.</p>
-        </div>
-      )}
-      {projects.map((p) => (
-        <ProjectCard key={p.id} project={p} onEdit={_setEditing} onDelete={() => void remove(p.id)} />
-      ))}
-    </div>
-  );
-}
-
-function ProjectCard({ project, onEdit, onDelete }: { project: Project; onEdit: (id: string) => void; onDelete: () => void }) {
-  return (
-    <div className="rounded-xl border border-line bg-paper-raised p-4">
-      <div className="flex items-start justify-between">
-        <div className="min-w-0">
-          <h3 className="text-[13.5px] font-semibold text-ink">{project.name}</h3>
-          {project.description && (
-            <p className="mt-0.5 text-[12px] text-ink-muted">{project.description}</p>
-          )}
-          <p className="mt-1 text-[11px] text-ink-faint">
-            Created {new Date(project.created_at * 1000).toLocaleDateString()}
-          </p>
-        </div>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => onEdit(project.id)}
-            className="press rounded px-2 py-1 text-[11.5px] text-ink-muted hover:bg-paper-sunken hover:text-ink"
-          >
-            Edit
-          </button>
-          <IconButton
-            icon={<Trash2 />}
-            label="Delete"
-            size="sm"
-            onClick={onDelete}
-          />
-        </div>
-      </div>
     </div>
   );
 }
