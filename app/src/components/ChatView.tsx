@@ -1,64 +1,9 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { Share2, Archive, Pencil, Check, X, AlertCircle, PanelRight, PanelRightClose, Copy, Settings as SettingsIcon, RefreshCcw } from "lucide-react";
+import { Pencil, Check, X, AlertCircle, Settings as SettingsIcon, RefreshCcw } from "lucide-react";
 import { useApp } from "../lib/store";
 import { ChatInput } from "./ChatInput";
 import { Message, ThinkingRow } from "./Message";
 import { IconButton } from "./IconButton";
-import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
-import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
-
-function CodePanel({
-  code,
-  lang,
-  onClose,
-}: {
-  code: string;
-  lang: string;
-  onClose: () => void;
-}) {
-  const [copied, setCopied] = useState(false);
-  const copy = () => {
-    navigator.clipboard.writeText(code).catch(() => {});
-    setCopied(true);
-    setTimeout(() => setCopied(false), 1800);
-  };
-
-  return (
-    <div className="flex h-full flex-col border-l border-line bg-paper">
-      <div className="flex h-10 shrink-0 items-center justify-between border-b border-line px-3">
-        <span className="text-[12px] font-mono text-ink-muted">{lang || "code"}</span>
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={copy}
-            className="press flex items-center gap-1.5 rounded px-2 py-1 text-[11px] text-ink-muted hover:bg-paper-sunken hover:text-ink"
-          >
-            {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
-            {copied ? "Copied" : "Copy"}
-          </button>
-          <IconButton icon={<PanelRightClose />} label="Close panel" size="sm" onClick={onClose} />
-        </div>
-      </div>
-      <div className="flex-1 overflow-auto">
-        <SyntaxHighlighter
-          language={lang || "text"}
-          style={oneLight as Record<string, React.CSSProperties>}
-          customStyle={{
-            margin: 0,
-            borderRadius: 0,
-            fontSize: "12.5px",
-            background: "transparent",
-            height: "100%",
-            padding: "16px",
-          }}
-          codeTagProps={{ style: { fontFamily: "var(--font-mono, monospace)" } }}
-        >
-          {code}
-        </SyntaxHighlighter>
-      </div>
-    </div>
-  );
-}
 
 export function ChatView() {
   const chat = useApp((s) =>
@@ -68,19 +13,23 @@ export function ChatView() {
   const send = useApp((s) => s.send);
   const retry = useApp((s) => s.retry);
   const setView = useApp((s) => s.setView);
+  const artifacts = useApp((s) => s.artifacts);
+  const openArtifact = useApp((s) => s.openArtifact);
   const endRef = useRef<HTMLDivElement>(null);
 
   const [editing, setEditing] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
-  const [panel, setPanel] = useState<{ code: string; lang: string } | null>(null);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
   }, [chat?.messages.length, chat?.working, chat?.status]);
 
-  const handleOpenPanel = useCallback((code: string, lang: string) => {
-    setPanel({ code, lang });
-  }, []);
+  const handleOpenArtifact = useCallback(
+    (artifact: Parameters<typeof openArtifact>[0]) => {
+      openArtifact(artifact);
+    },
+    [openArtifact],
+  );
 
   const handleAskSubmit = useCallback(
     (_msgId: string, choice: string) => {
@@ -152,23 +101,6 @@ export function ChatView() {
             <span className="text-[10.5px] text-ink-faint font-mono">
               {chat.messages.length} msgs
             </span>
-            {panel ? (
-              <IconButton
-                icon={<PanelRightClose />}
-                label="Close panel"
-                size="md"
-                onClick={() => setPanel(null)}
-              />
-            ) : (
-              <IconButton
-                icon={<PanelRight />}
-                label="Code panel"
-                size="md"
-                onClick={() => {}}
-              />
-            )}
-            <IconButton icon={<Archive />} label="Archive" size="md" />
-            <IconButton icon={<Share2 />} label="Share" size="md" />
           </div>
         </div>
 
@@ -186,7 +118,8 @@ export function ChatView() {
                   key={m.id}
                   message={m}
                   onAskSubmit={handleAskSubmit}
-                  onOpenPanel={handleOpenPanel}
+                  onOpenArtifact={handleOpenArtifact}
+                  artifacts={artifacts}
                   streaming={isStreaming}
                   activities={activities}
                 />
@@ -194,13 +127,13 @@ export function ChatView() {
             })}
             {showThinking && chat.activities.length === 0 && <ThinkingRow status={chat.status || "Thinking"} />}
             {chat.error && (
-              <div className="flex animate-fade-in items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700">
+              <div className="flex animate-fade-in items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12.5px] text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
                 <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
                 <span className="break-words">{chat.error}</span>
               </div>
             )}
             {chat.needsSetup && !chat.working && (
-              <div className="flex animate-fade-in items-center gap-2 rounded-lg border border-line bg-paper-raised px-3 py-2">
+              <div className="flex animate-fade-in items-center gap-2 rounded-lg border border-line bg-paper-sunken px-3 py-2">
                 <button
                   type="button"
                   onClick={() => setView("settings")}
@@ -211,7 +144,7 @@ export function ChatView() {
                 <button
                   type="button"
                   onClick={() => void retry()}
-                  className="press inline-flex items-center gap-1.5 rounded-md bg-ink px-2.5 py-1 text-[12.5px] font-medium text-paper hover:bg-ink-soft"
+                  className="press inline-flex items-center gap-1.5 rounded-md border border-line bg-paper-sunken px-2.5 py-1 text-[12.5px] font-medium text-ink hover:bg-paper hover:border-line-strong"
                 >
                   <RefreshCcw className="h-3.5 w-3.5" /> Retry
                 </button>
@@ -231,17 +164,6 @@ export function ChatView() {
           </div>
         </div>
       </div>
-
-      {/* Right code panel */}
-      {panel && (
-        <div className="h-full w-[480px] shrink-0">
-          <CodePanel
-            code={panel.code}
-            lang={panel.lang}
-            onClose={() => setPanel(null)}
-          />
-        </div>
-      )}
     </div>
   );
 }

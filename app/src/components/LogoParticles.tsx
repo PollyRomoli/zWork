@@ -179,7 +179,7 @@ export function LogoParticles({
     let points: THREE.Points | null = null;
     let spinGroup: THREE.Group | null = null;
     let themeObs: MutationObserver | null = null;
-    let clock: THREE.Clock | null = null;
+    let timer: THREE.Timer | null = null;
     let raf = 0;
 
     const boot = async () => {
@@ -311,12 +311,13 @@ export function LogoParticles({
           attributeFilter: ["class"],
         });
 
-        clock = new THREE.Clock();
+        timer = new THREE.Timer();
+        timer.connect(document);
         const angularVelocity = spinSpeed * 165;
         const tick = () => {
           if (
             cancelled ||
-            !clock ||
+            !timer ||
             !renderer ||
             !scene ||
             !camera ||
@@ -325,7 +326,8 @@ export function LogoParticles({
             return;
           }
 
-          const elapsed = clock.getElapsedTime();
+          timer.update();
+          const elapsed = timer.getElapsed();
           uniforms.uTime.value = elapsed;
           spinGroup.rotation.z = elapsed * angularVelocity;
           renderer.render(scene, camera);
@@ -344,6 +346,7 @@ export function LogoParticles({
       cancelled = true;
       cancelAnimationFrame(raf);
       themeObs?.disconnect();
+      timer?.dispose();
       geometry?.dispose();
       material?.dispose();
       renderer?.dispose();

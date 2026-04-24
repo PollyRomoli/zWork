@@ -6,6 +6,9 @@ import os
 import platform
 import getpass
 import re
+import base64
+import binascii
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -20,6 +23,7 @@ from .agent import settings as settings_mod
 from .agent import home as home_mod
 from .agent import projects as projects_mod
 from .agent.env_loader import load_dotenv
+from .core.util import new_id
 
 # Load .env from repo root (optional).
 load_dotenv()
@@ -75,6 +79,8 @@ class StreamRequest(BaseModel):
     message: str
     model: str | None = None
     new_chat_title: str | None = None
+    artifact_mode: bool = True
+    attachments: list[UploadItem] | None = None
 
 
 class ProjectCreate(BaseModel):
@@ -89,6 +95,33 @@ class ProjectUpdate(BaseModel):
 
 class ContentBody(BaseModel):
     content: str
+
+
+class UploadItem(BaseModel):
+    client_id: str | None = None
+    name: str
+    mime: str = "application/octet-stream"
+    kind: str = "file"
+    path: str | None = None
+    text_content: str | None = None
+    data_url: str | None = None
+
+
+class UploadBody(BaseModel):
+    files: list[UploadItem]
+
+
+def _artifact_hint(message: str) -> str:
+    t = message.lower()
+    if any(k in t for k in ["document", "doc", "brief", "report", "note", "summary", "outline", "write a", "draft a", "make a document"]):
+        return "The user's request clearly wants a document artifact. Create a sidebar artifact of kind doc."
+    if any(k in t for k in ["table", "sheet", "spreadsheet", "csv", "tsv", "rows", "columns"]):
+        return "The user's request clearly wants a table or spreadsheet artifact. Create a sidebar artifact of kind sheet."
+    if any(k in t for k in ["chart", "graph", "plot", "visualization", "visualise", "visualize"]):
+        return "The user's request clearly wants a graph artifact. Create a sidebar artifact of kind graph."
+    if any(k in t for k in ["code snippet", "script", "example code", "runnable example"]):
+        return "The user's request clearly wants a code artifact. Create a sidebar artifact of kind code."
+    return "The user's request may or may not want an artifact. If the output is best represented as an editable deliverable, create one."
 
 
 # ---------------- Health / meta ----------------
@@ -556,6 +589,46 @@ def put_user_md(body: ContentBody) -> dict:
     return {"ok": True}
 
 
+# ---------------- Uploads ----------------
+
+@app.post("/api/uploads")
+def upload_files(body: UploadBody) -> dict:
+    uploads_dir = home_mod.workspace_uploads_dir()
+    results: list[dict[str, Any]] = []
+    for item in body.files:
+        safe_name = Path(item.name or "upload").name
+        suffix = Path(safe_name).suffix or mimetypes.guess_extension(item.mime or "") or ""
+        stem = Path(safe_name).stem or "upload"
+        out = uploads_dir / f"{stem}-{new_id('upload')}{suffix}"
+
+        if item.text_content is not None:
+            out.write_text(item.text_content, encoding="utf-8")
+            size = len(item.text_content.encode("utf-8"))
+        elif item.data_url:
+            raw = item.data_url
+            if raw.startswith("data:"):
+                raw = raw.split(",", 1)[1] if "," in raw else ""
+            try:
+                data = base64.b64decode(raw, validate=False)
+            except (ValueError, binascii.Error):
+                data = b""
+            out.write_bytes(data)
+            size = len(data)
+        else:
+            out.write_text("", encoding="utf-8")
+            size = 0
+
+        results.append({
+            "client_id": item.client_id,
+            "name": safe_name,
+            "path": str(out),
+            "mime": item.mime,
+            "kind": item.kind,
+            "size": size,
+        })
+    return {"files": results}
+
+
 # ---------------- Projects ----------------
 
 @app.get("/api/projects")
@@ -728,7 +801,7 @@ async def chat_stream(req: StreamRequest):
             msg = (
                 "No model is configured yet. "
                 "Open **Settings → Credentials** to add an API key, "
-                "or enable **Claude Code** reuse if you have it installed."
+                "or enable local credential reuse if you have it installed."
             )
             yield _sse({"type": "status", "text": "Setup needed"})
             # Stream it as a delta so it appears in the assistant bubble
@@ -745,13 +818,29 @@ async def chat_stream(req: StreamRequest):
     prompt = settings_mod.build_system_prompt(
         model_name=model_meta.get("model_id") or model_id,
         provider_name=(
-            "Claude Code" if model_meta.get("credential") == "claude_code"
+            "local credentials" if model_meta.get("credential") == "claude_code"
             else model_meta.get("subtitle") or "a model provider"
         ),
         user_name=_display_name(),
         os_name=_os_pretty(),
         cwd=str(Path.cwd()),
     )
+
+    attachment_block = ""
+    if req.attachments:
+        lines = ["## Current interaction context"]
+        lines.append(f"Artifact mode: {'on' if req.artifact_mode else 'off'}")
+        lines.append("Attachments uploaded into `~/.zwork/workspace/uploads`:")
+        for a in req.attachments:
+            lines.append(f"- {a.name} → {a.path}")
+        attachment_block = "\n".join(lines)
+    else:
+        attachment_block = "\n".join([
+            "## Current interaction context",
+            f"Artifact mode: {'on' if req.artifact_mode else 'off'}",
+            "Attachments: none.",
+        ])
+    prompt = f"{prompt}\n\n{attachment_block}\n\n## Artifact intent hint\n{_artifact_hint(req.message)}"
 
     history = [{"role": m.role, "content": m.content} for m in chat.messages]
 

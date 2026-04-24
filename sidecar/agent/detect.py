@@ -1,7 +1,7 @@
 """Detect local AI CLI tool configurations that zWork can reuse.
 
 Currently supported for credential reuse:
-  - Claude Code (`~/.claude/settings.json` env block)
+  - local credentials (`~/.claude/settings.json` env block)
 
 Detected only (presence/status, no credential reuse yet):
   - OpenAI Codex CLI  (`~/.codex/`)
@@ -38,7 +38,7 @@ def _claude_code() -> Integration:
             if env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_API_KEY"):
                 reuse = True
                 base = env.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
-                detail = f"Will use credentials from Claude Code (base: {base})"
+                detail = f"Will use local credentials (base: {base})"
             else:
                 detail = "Installed; no API token in env block"
         except Exception as e:  # pragma: no cover
@@ -47,7 +47,7 @@ def _claude_code() -> Integration:
         detail = "Installed (OAuth mode; token reuse not yet supported)"
     return Integration(
         id="claude_code",
-        name="Claude Code",
+        name="Local credentials",
         detected=present,
         can_reuse_credentials=reuse,
         detail=detail,
@@ -88,7 +88,7 @@ def detect_all() -> list[Integration]:
 
 
 def read_claude_code_env() -> dict[str, str]:
-    """Return the env block from Claude Code settings, or {}."""
+    """Return the env block from local credential settings, or {}."""
     settings = Path("~/.claude/settings.json").expanduser()
     if not settings.exists():
         return {}
@@ -101,7 +101,7 @@ def read_claude_code_env() -> dict[str, str]:
 
 
 def read_claude_code_model() -> str | None:
-    """Return the `model` field from Claude Code settings if any."""
+    """Return the `model` field from local credential settings if any."""
     settings = Path("~/.claude/settings.json").expanduser()
     if not settings.exists():
         return None

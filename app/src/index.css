@@ -263,3 +263,15 @@ textarea {
   overflow-y: hidden;
   overflow-x: visible;
 }
+
+/* --------------------------------------------------------
+   Typing cursor — inline blink during streaming
+   -------------------------------------------------------- */
+@keyframes typing-cursor {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+
+.animate-typing-cursor {
+  animation: typing-cursor 1s step-end infinite;
+}

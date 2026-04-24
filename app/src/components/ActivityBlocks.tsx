@@ -59,7 +59,7 @@ export function ActivityBlocks({ items }: { items: ActivityItem[] }) {
               "flex items-center gap-2.5 rounded-lg border px-3 py-2 text-[12.5px] font-medium transition-colors",
               item.done
                 ? "border-emerald-200 bg-emerald-50 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300"
-                : "border-line bg-paper-sunken text-ink dark:bg-paper-raised",
+                : "border-line bg-paper-sunken text-ink",
             )}
           >
             <Icon

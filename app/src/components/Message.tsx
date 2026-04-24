@@ -6,10 +6,22 @@ import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import { Prism as SyntaxHighlighter } from "react-syntax-highlighter";
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism";
-import { Copy, Check as CheckIcon, RefreshCcw, ThumbsDown, ChevronDown } from "lucide-react";
+import {
+  Copy,
+  Check as CheckIcon,
+  RefreshCcw,
+  ThumbsDown,
+  ChevronDown,
+  Code2,
+  FileText,
+  Table2,
+  BarChart3,
+  Globe,
+  GitCompare,
+} from "lucide-react";
 import { cn } from "../lib/cn";
 import { ActivityBlocks } from "./ActivityBlocks";
-import type { Activity } from "../lib/store";
+import type { Activity, Artifact } from "../lib/store";
 import { Logo } from "./Logo";
 import { IconButton } from "./IconButton";
 import { AskCard, splitAroundAsk, parseAskPayload } from "./AskCard";
@@ -46,7 +58,7 @@ function CodeBlock({
             <button
               type="button"
               onClick={() => onOpenPanel(code, language)}
-              className="press rounded px-1.5 py-0.5 text-[10px] text-ink-muted hover:bg-paper hover:text-ink"
+              className="press rounded border border-line bg-paper px-1.5 py-0.5 text-[10px] text-ink-muted hover:bg-paper-sunken hover:text-ink"
             >
               Open
             </button>
@@ -189,13 +201,15 @@ function AssistantMarkdown({
 export function Message({
   message,
   onAskSubmit,
-  onOpenPanel,
+  onOpenArtifact,
+  artifacts,
   streaming,
   activities,
 }: {
   message: Msg;
   onAskSubmit?: (msgId: string, choice: string) => void;
-  onOpenPanel?: (code: string, lang: string) => void;
+  onOpenArtifact?: (artifact: Artifact) => void;
+  artifacts?: Artifact[];
   streaming?: boolean;
   activities?: Activity[];
 }) {
@@ -243,7 +257,17 @@ export function Message({
                 <AssistantMarkdown
                   key={i}
                   content={trimmed}
-                  onOpenPanel={onOpenPanel}
+                  onOpenPanel={onOpenArtifact ? (code, lang) => {
+                    onOpenArtifact({
+                      id: `code-${Date.now()}`,
+                      kind: "code",
+                      title: lang || "Untitled code",
+                      language: lang,
+                      content: code,
+                      createdAt: Date.now(),
+                      sourceMessageId: message.id,
+                    });
+                  } : undefined}
                 />
               );
             }
@@ -269,6 +293,41 @@ export function Message({
             <span className="inline-block h-[1em] w-[2px] align-middle bg-ink animate-typing-cursor ml-0.5" />
           )}
         </div>
+
+        {artifacts && artifacts.length > 0 && (
+          <div className="mt-3 flex flex-col gap-2">
+            {artifacts
+              .filter((artifact) => artifact.sourceMessageId === message.id)
+              .map((artifact) => (
+                <button
+                  key={artifact.id}
+                  type="button"
+                  onClick={() => onOpenArtifact?.(artifact)}
+                  className={cn(
+                    "press flex w-full items-center gap-3 rounded-2xl border border-line bg-paper-raised px-3.5 py-3 text-left",
+                    "hover:border-line-strong hover:bg-paper-sunken",
+                  )}
+                >
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl border border-line bg-paper-sunken text-ink-muted">
+                    {artifact.kind === "doc" && <FileText className="h-4 w-4" />}
+                    {artifact.kind === "sheet" && <Table2 className="h-4 w-4" />}
+                    {artifact.kind === "graph" && <BarChart3 className="h-4 w-4" />}
+                    {artifact.kind === "code" && <Code2 className="h-4 w-4" />}
+                    {artifact.kind === "preview" && <Globe className="h-4 w-4" />}
+                    {artifact.kind === "diff" && <GitCompare className="h-4 w-4" />}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="truncate text-[13px] font-medium text-ink">
+                      {artifact.title}
+                    </div>
+                    <div className="mt-0.5 text-[11.5px] text-ink-muted">
+                      Click to open in the sidebar
+                    </div>
+                  </div>
+                </button>
+              ))}
+          </div>
+        )}
 
         <div className="mt-1 flex items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
           <IconButton icon={<Copy />} label="Copy" size="sm" />

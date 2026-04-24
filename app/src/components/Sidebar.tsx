@@ -19,6 +19,7 @@ import { IconButton } from "./IconButton";
 import { useApp, bucketFor, type ChatBucket } from "../lib/store";
 
 export function Sidebar() {
+  const SHOW_PROJECTS = false;
   const open = useApp((s) => s.sidebarOpen);
   const toggle = useApp((s) => s.toggleSidebar);
   const summaries = useApp((s) => s.chatSummaries);
@@ -29,9 +30,7 @@ export function Sidebar() {
   const view = useApp((s) => s.view);
   const setView = useApp((s) => s.setView);
   const setSearchOpen = useApp((s) => s.setSearchOpen);
-  const projects = useApp((s) => s.projects);
   const setActiveProject = useApp((s) => s.setActiveProject);
-  const createProject = useApp((s) => s.createProject);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const grouped = useMemo(() => {
@@ -128,48 +127,28 @@ export function Sidebar() {
       </nav>
 
       {/* Projects */}
-      {open && (
+      {SHOW_PROJECTS && open && (
         <div className="px-2 mt-3">
           <SectionLabel title="Projects" />
           <ul className="mt-1 flex flex-col">
             <li>
               <button
                 type="button"
-                onClick={async () => {
-                  const name = window.prompt("Project name?");
-                  if (!name || !name.trim()) return;
-                  await createProject(name.trim());
-                  // Open the newly-created project (last in list by creation time).
-                  const all = useApp.getState().projects;
-                  const latest = all[all.length - 1];
-                  if (latest) {
-                    setActiveProject(latest.id);
-                    setView("projects");
-                  } else {
-                    setView("settings");
-                  }
+                onClick={() => {
+                  setActiveProject(null);
+                  setView("projects");
                 }}
-                className="press flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink-muted hover:bg-line/60 hover:text-ink"
+                className={cn(
+                  "press flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink-muted",
+                  "hover:bg-line/60 hover:text-ink",
+                  view === "projects" && !useApp.getState().activeProjectId &&
+                    "bg-paper-raised text-ink shadow-[0_0_0_1px_rgba(17,17,17,0.06)]",
+                )}
               >
-                <SquarePen className="h-3.5 w-3.5" />
-                <span>New Project</span>
+                <FolderOpen className="h-3.5 w-3.5 shrink-0" />
+                <span>My Projects</span>
               </button>
             </li>
-            {projects.map((p) => (
-              <li key={p.id}>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setActiveProject(p.id);
-                    setView("projects");
-                  }}
-                  className="press flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-[12.5px] text-ink-muted hover:bg-line/60 hover:text-ink"
-                >
-                  <FolderOpen className="h-3.5 w-3.5 shrink-0" />
-                  <span className="truncate">{p.name}</span>
-                </button>
-              </li>
-            ))}
           </ul>
         </div>
       )}
@@ -301,6 +280,7 @@ function SidebarButton({
           label={label}
           shortcut={shortcut}
           tooltipSide="right"
+          showTooltip={false}
           onClick={onClick}
           active={active}
           size="md"

@@ -70,7 +70,7 @@ const CREDENTIAL_PLACEHOLDERS: Record<string, { keyPlaceholder: string; baseUrlP
     baseUrlPlaceholder: "https://api.openai.com/v1",
   },
   claude_code: {
-    keyPlaceholder: "(reuses Claude Code — no key needed)",
+    keyPlaceholder: "(reuses local credentials — no key needed)",
     baseUrlPlaceholder: "",
   },
 };
@@ -354,7 +354,7 @@ function ModelsPanel({
             <Field label="Display name">
               <input
                 className="block w-full rounded-lg border border-line bg-paper px-3 py-2 text-[12.5px] text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"
-                placeholder="My Claude proxy"
+                placeholder="My local proxy"
                 value={form.name}
                 onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
               />
@@ -368,11 +368,11 @@ function ModelsPanel({
                   setForm((f) => ({ ...f, credential: cred, shape }));
                 }}
                 className="block w-full rounded-lg border border-line bg-paper px-3 py-2 text-[12.5px] text-ink focus:border-line-strong focus:outline-none"
-              >
-                <option value="anthropic">Anthropic (BYOK)</option>
-                <option value="openai">OpenAI-compatible (BYOK)</option>
-                <option value="claude_code">Claude Code (local config)</option>
-              </select>
+                >
+                  <option value="anthropic">Anthropic (BYOK)</option>
+                  <option value="openai">OpenAI-compatible (BYOK)</option>
+                  <option value="claude_code">Local config (reuse credentials)</option>
+                </select>
             </Field>
 
             {/* Credential status + inline key + base URL */}
@@ -385,8 +385,8 @@ function ModelsPanel({
                     <CircleDashed className="h-3.5 w-3.5 text-ink-faint" />
                   )}
                   {credStatus?.configured
-                    ? "Reusing Claude Code credentials from ~/.claude/"
-                    : "Claude Code not detected — install it first"}
+                    ? "Reusing local credentials from ~/.claude/"
+                    : "Local credentials not detected — install them first"}
                 </span>
               </div>
             ) : (
@@ -632,7 +632,7 @@ function GeneralPanel({
         </Field>
       </section>
 
-      {/* Claude Code config toggle */}
+      {/* Local credential config toggle */}
       <section className="rounded-xl border border-line bg-paper-raised p-4">
         <label className="flex items-start gap-3">
           <input
@@ -645,7 +645,7 @@ function GeneralPanel({
             className="mt-[3px] h-4 w-4 accent-ink"
           />
           <div>
-            <div className="text-[13px] font-medium text-ink">Reuse Claude Code credentials</div>
+            <div className="text-[13px] font-medium text-ink">Reuse local credentials</div>
             <div className="text-[12px] text-ink-muted">
               When enabled and no BYOK key is set, zWork reads{" "}
               <code className="font-mono text-[11.5px]">~/.claude/settings.json</code>{" "}

@@ -155,6 +155,15 @@ export interface Project {
   chat_ids: string[];
 }
 
+export interface UploadedFile {
+  client_id?: string | null;
+  name: string;
+  path: string;
+  mime: string;
+  kind: string;
+  size: number;
+}
+
 export const api = {
   health: () => fetch(u("/api/health")).then((r) => j<{ ok: boolean }>(r)),
 
@@ -256,6 +265,20 @@ export const api = {
       body: JSON.stringify({ content }),
     }).then((r) => j<{ ok: boolean }>(r)),
 
+  uploadFiles: (files: Array<{
+    client_id?: string | null;
+    name: string;
+    mime: string;
+    kind: string;
+    text_content?: string | null;
+    data_url?: string | null;
+  }>) =>
+    fetch(u("/api/uploads"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ files }),
+    }).then((r) => j<{ files: UploadedFile[] }>(r)),
+
   // ---- Projects ----
   listProjects: () =>
     fetch(u("/api/projects")).then((r) => j<{ projects: Project[] }>(r)),
@@ -313,7 +336,19 @@ export type StreamEvent =
   | { type: "tool_result"; tool: string; ok: boolean; message: string };
 
 export async function streamChat(
-  body: { chat_id?: string; message: string; model?: string },
+  body: {
+    chat_id?: string;
+    message: string;
+    model?: string;
+    artifact_mode?: boolean;
+    attachments?: Array<{
+      client_id?: string | null;
+      name: string;
+      path: string;
+      mime: string;
+      kind: string;
+    }>;
+  },
   onEvent: (evt: StreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {

@@ -206,8 +206,8 @@ const PRESETS: CredentialPreset[] = [
   },
   {
     id: "claude_code",
-    label: "Claude Code",
-    subtitle: "Reuse your installed Claude Code credentials",
+    label: "Local credentials",
+    subtitle: "Reuse your installed local credentials",
     shape: "anthropic",
     credential: "claude_code",
     defaultBaseUrl: "",
@@ -1065,7 +1065,7 @@ function ApiKeyStep({
 
       {preset?.keyless && (
         <p className="rounded-lg border border-line bg-paper-raised px-3 py-2 text-[12.5px] text-ink-muted">
-          ✓ zWork will detect your Claude Code credentials from{" "}
+          ✓ zWork will detect your local credentials from{" "}
           <code className="rounded bg-paper-sunken px-1 py-0.5 text-[11.5px]">
             ~/.claude/
           </code>

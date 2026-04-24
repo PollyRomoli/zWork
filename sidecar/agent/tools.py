@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import sys
 import subprocess
 import shlex
 from pathlib import Path
@@ -125,6 +126,27 @@ TOOL_SCHEMAS: list[dict] = [
                 "content": {"type": "string", "description": "The fact or note to remember"},
             },
             "required": ["content"],
+        },
+    },
+    {
+        "name": "dctl",
+        "description": (
+            "Run the local dctl desktop-control CLI for window/app/browser automation, "
+            "accessibility tree inspection, screenshots, and focus/click/type/scroll actions. "
+            "Prefer this over raw shell for GUI work."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "subcommand": {"type": "string", "description": "dctl subcommand to run"},
+                "args": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Arguments passed to the dctl subcommand",
+                },
+                "cwd": {"type": "string", "description": "Working directory for the command"},
+            },
+            "required": ["subcommand"],
         },
     },
 ]
@@ -249,6 +271,27 @@ async def execute_tool(tool_name: str, params: dict[str, Any]) -> AsyncIterator[
                    "message": "Saved to memory."}
         except Exception as e:
             yield {"type": "activity", "id": tool_id, "label": f"Failed: {label}", "icon": "file", "done": True}
+            yield {"type": "tool_result", "tool": tool_name, "ok": False, "message": str(e)}
+        return
+
+    if tool_name == "dctl":
+        subcommand = str(params.get("subcommand", "")).strip()
+        args = [str(a) for a in (params.get("args") or []) if str(a).strip()]
+        cwd = params.get("cwd", ".")
+        full = " ".join([subcommand, *args]).strip()
+        label = f"dctl {full}" if full else "dctl"
+        yield {"type": "activity", "id": tool_id, "label": label, "icon": "window", "done": False}
+        try:
+            result = _run_dctl(subcommand, args, cwd)
+            yield {"type": "activity", "id": tool_id, "label": label, "icon": "window", "done": True}
+            yield {
+                "type": "tool_result",
+                "tool": tool_name,
+                "ok": result["ok"],
+                "message": result["output"] or (f"exit {result['returncode']}" if not result["ok"] else "ok"),
+            }
+        except Exception as e:
+            yield {"type": "activity", "id": tool_id, "label": f"Failed: {label}", "icon": "window", "done": True}
             yield {"type": "tool_result", "tool": tool_name, "ok": False, "message": str(e)}
         return
 
@@ -420,6 +463,39 @@ def _save_memory(content: str) -> None:
     timestamp = _time.strftime("%Y-%m-%d")
     entry = f"\n- {content}  ({timestamp})"
     p.write_text((existing + entry + "\n"), encoding="utf-8")
+
+
+def _dctl_env() -> dict[str, str]:
+    env = os.environ.copy()
+    repo = Path(__file__).resolve().parents[3] / "dctl"
+    if repo.exists():
+        prev = env.get("PYTHONPATH", "")
+        env["PYTHONPATH"] = f"{repo}{os.pathsep}{prev}" if prev else str(repo)
+    return env
+
+
+def _run_dctl(subcommand: str, args: list[str], cwd: str) -> dict[str, Any]:
+    if not subcommand:
+        raise ValueError("dctl requires a subcommand")
+    cmd = [sys.executable, "-m", "dctl", subcommand, *args]
+    result = subprocess.run(
+        cmd,
+        cwd=Path(cwd).expanduser(),
+        capture_output=True,
+        text=True,
+        timeout=120,
+        env=_dctl_env(),
+    )
+    output = result.stdout
+    if result.stderr:
+        output += ("\n" + result.stderr) if output else result.stderr
+    if len(output) > 20_000:
+        output = output[:20_000] + "\n…[truncated]"
+    return {
+        "ok": result.returncode == 0,
+        "returncode": result.returncode,
+        "output": output.strip(),
+    }
 
 
 # ---------------- Legacy <<TOOL>> marker parser ----------------

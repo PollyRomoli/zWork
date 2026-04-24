@@ -2,7 +2,7 @@
 
 A "provider" here is an API *shape* (Anthropic-compatible or
 OpenAI-compatible). Credentials are stored per shape in zWork settings,
-OR pulled from the Claude Code integration env block.
+or pulled from the local credential integration env block.
 
 Models are user-defined (zWork-local ids). Each model declares which
 shape to speak and which credential source to use. There is no
@@ -154,7 +154,7 @@ def available_models(s: settings_mod.Settings) -> list[dict]:
             cc_model = detect.read_claude_code_model() or ""
             out.append({
                 "id": "__claude_code__",
-                "name": "Claude Code credentials",
+                "name": "Local credentials",
                 "subtitle": f"via {cc.base_url}",
                 "shape": "anthropic",
                 "credential": "claude_code",
@@ -184,7 +184,7 @@ def _subtitle_for(m: dict, cred: Optional[Credentials]) -> str:
     cred_label = {
         "anthropic": "Anthropic-compatible",
         "openai": "OpenAI-compatible",
-        "claude_code": "via Claude Code",
+        "claude_code": "via local credentials",
     }.get(m.get("credential", ""), m.get("credential", ""))
     if base:
         return f"{cred_label} · {base}"
@@ -512,11 +512,11 @@ async def stream_chat(
     if creds is None:
         yield {
             "type": "error",
-            "text": (
-                f"No credentials for '{model['credential']}'. "
-                "Add an API key in Settings → Credentials, or enable Claude Code reuse."
-            ),
-        }
+                "text": (
+                    f"No credentials for '{model['credential']}'. "
+                    "Add an API key in Settings → Credentials, or enable local credential reuse."
+                ),
+            }
         yield {"type": "done"}
         return
 

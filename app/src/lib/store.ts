@@ -49,6 +49,96 @@ export type View = "chat" | "settings" | "projects";
 
 export type ChatBucket = "Today" | "This week" | "Earlier";
 
+// ---- Artifacts ----
+
+export type ArtifactKind = "code" | "diff" | "doc" | "sheet" | "graph" | "preview";
+
+export interface Artifact {
+  id: string;
+  kind: ArtifactKind;
+  title: string;
+  language?: string;
+  content: string;
+  /** For diff artifacts: the original content. */
+  original?: string;
+  /** For sheet artifacts: parsed row/col data. */
+  rows?: string[][];
+  /** For graph/preview artifacts: an image URL or HTML src. */
+  src?: string;
+  createdAt: number;
+  sourceMessageId?: string;
+}
+
+function parseArtifactAttributes(src: string): Record<string, string> {
+  const out: Record<string, string> = {};
+  const re = /(\w+)=("([^"]*)"|'([^']*)'|[^\s]+)/g;
+  for (const match of src.matchAll(re)) {
+    const key = match[1];
+    const value = match[3] ?? match[4] ?? match[2] ?? "";
+    out[key] = String(value).trim();
+  }
+  return out;
+}
+
+function extractArtifacts(text: string, sourceMessageId?: string): { cleaned: string; artifacts: Artifact[] } {
+  const re = /\[\[ARTIFACT\s+([^\]]+)\]\]([\s\S]*?)\[\[\/ARTIFACT\]\]/g;
+  const artifacts: Artifact[] = [];
+  let cleaned = text;
+  for (const match of text.matchAll(re)) {
+    const attrs = parseArtifactAttributes(match[1] || "");
+    const kind = (attrs.kind || "doc") as ArtifactKind;
+    const title = attrs.title || {
+      doc: "Document",
+      sheet: "Sheet",
+      graph: "Graph",
+      code: "Code",
+      diff: "Diff",
+      preview: "Preview",
+    }[kind] || "Artifact";
+    const body = (match[2] || "").trim();
+    const artifact: Artifact = {
+      id: uid(),
+      kind,
+      title,
+      content: body,
+      createdAt: Date.now(),
+      sourceMessageId,
+    };
+    if (kind === "sheet") {
+      artifact.rows = body
+        .split("\n")
+        .filter((line) => line.trim().length > 0)
+        .map((line) => line.split("\t"));
+    }
+    if (kind === "graph" && body.startsWith("data:image/")) {
+      artifact.src = body;
+    }
+    artifacts.push(artifact);
+    cleaned = cleaned.replace(match[0], "").trim();
+  }
+  cleaned = cleaned.replace(/\n{3,}/g, "\n\n").trim();
+  return { cleaned, artifacts };
+}
+
+function inferArtifactKind(text: string): ArtifactKind | null {
+  const t = text.toLowerCase();
+  if (/(table|sheet|spreadsheet|csv|tsv|rows|columns)/.test(t)) return "sheet";
+  if (/(chart|graph|plot|visualization|visualise|visualize)/.test(t)) return "graph";
+  if (/(code snippet|script|runnable example|example code)/.test(t)) return "code";
+  if (/(document|doc|brief|report|note|summary|outline|write a|draft a|make a document|create a document)/.test(t)) return "doc";
+  return null;
+}
+
+function sanitizeArtifactContent(text: string): string {
+  return text
+    .replace(/^Created artifact:.*$/gim, "")
+    .replace(/^Created a .* artifact in the sidebar\.$/gim, "")
+    .replace(/`?\.sidecar\/[^`\s]+`?/g, "")
+    .replace(/Created\s+\w+\s+artifact:?\s*/gim, "")
+    .trim()
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 interface AppState {
   // UI
   sidebarOpen: boolean;
@@ -88,6 +178,15 @@ interface AppState {
   // Abort for an in-flight stream
   _abort: AbortController | null;
 
+  // Artifacts
+  artifacts: Artifact[];
+  activeArtifactId: string | null;
+  artifactPanelOpen: boolean;
+  openArtifact: (a: Artifact) => void;
+  closeArtifactPanel: () => void;
+  clearArtifacts: () => void;
+  updateArtifact: (id: string, patch: Partial<Artifact>) => void;
+
   // Projects
   projects: Project[];
   activeProjectId: string | null;
@@ -104,6 +203,8 @@ interface AppState {
   saveMemory: (content: string) => Promise<void>;
   refreshUserMd: () => Promise<void>;
   saveUserMd: (content: string) => Promise<void>;
+  artifactMode: boolean;
+  setArtifactMode: (v: boolean) => void;
 
   // Actions
   bootstrap: () => Promise<void>;
@@ -118,7 +219,19 @@ interface AppState {
   deleteChat: (id: string) => Promise<void>;
   renameChat: (id: string, title: string) => Promise<void>;
 
-  send: (text: string) => Promise<void>;
+  send: (
+    text: string,
+    options?: {
+      artifactMode?: boolean;
+      attachments?: Array<{
+        client_id?: string | null;
+        name: string;
+        path: string;
+        mime: string;
+        kind: string;
+      }>;
+    },
+  ) => Promise<void>;
   retry: () => Promise<void>;
   stop: () => void;
 
@@ -157,11 +270,26 @@ export const useApp = create<AppState>((set, get) => ({
   activeChatId: null,
   _abort: null,
 
+  artifacts: [],
+  activeArtifactId: null,
+  artifactPanelOpen: false,
+  openArtifact: (a) => {
+    set((s) => {
+      const exists = s.artifacts.find((x) => x.id === a.id);
+      const artifacts = exists ? s.artifacts : [...s.artifacts, a];
+      return { artifacts, activeArtifactId: a.id, artifactPanelOpen: true };
+    });
+  },
+  closeArtifactPanel: () => set({ artifactPanelOpen: false, activeArtifactId: null }),
+  clearArtifacts: () => set({ artifacts: [], activeArtifactId: null, artifactPanelOpen: false }),
+
   projects: [],
   activeProjectId: null,
   setActiveProject: (id) => set({ activeProjectId: id }),
   memoryContent: "",
   userMdContent: "",
+  artifactMode: true,
+  setArtifactMode: (v) => set({ artifactMode: v }),
 
   refreshProjects: async () => {
     try {
@@ -405,21 +533,25 @@ export const useApp = create<AppState>((set, get) => ({
     await get().send(last);
   },
 
-  send: async (text) => {
+  send: async (text, options) => {
     const trimmed = text.trim();
     if (!trimmed) return;
 
     const currentId = get().activeChatId;
     const model = get().model || get().providers?.default_model || "";
+    const inferredArtifactKind = inferArtifactKind(trimmed);
+    const artifactMode = (options?.artifactMode ?? get().artifactMode) || !!inferredArtifactKind;
+    const attachments = options?.attachments ?? [];
 
     // Optimistically place the user message into a local chat.
     // If there's no active chat yet, create a provisional client-side one; the
     // server will assign the real id via the "chat" SSE event and we reconcile.
     let localId = currentId ?? `tmp_${uid()}`;
+    const userMsgText = trimmed;
     const userMsg: Message = {
       id: uid(),
       role: "user",
-      content: trimmed,
+      content: userMsgText,
       createdAt: Date.now(),
     };
 
@@ -433,19 +565,19 @@ export const useApp = create<AppState>((set, get) => ({
           status: "Thinking",
           error: undefined,
           needsSetup: false,
-          lastUserMessage: trimmed,
+          lastUserMessage: userMsgText,
           activities: [],
           updatedAt: Date.now(),
         }
         : {
           id: localId,
           title:
-            trimmed.slice(0, 56) + (trimmed.length > 56 ? "…" : ""),
+            userMsgText.slice(0, 56) + (userMsgText.length > 56 ? "…" : ""),
           updatedAt: Date.now(),
           messages: [userMsg],
           working: true,
           status: "Thinking",
-          lastUserMessage: trimmed,
+          lastUserMessage: userMsgText,
           activities: [],
         };
       return {
@@ -486,6 +618,8 @@ export const useApp = create<AppState>((set, get) => ({
           chat_id: currentId && !currentId.startsWith("tmp_") ? currentId : undefined,
           message: trimmed,
           model,
+          artifact_mode: artifactMode,
+          attachments,
         },
         (evt) => {
           if (evt.type === "chat") {
@@ -597,17 +731,98 @@ export const useApp = create<AppState>((set, get) => ({
         },
         controller.signal,
       );
+
+      const assistantContent = get().chats[localId]?.messages.find((m) => m.id === asstId)?.content || "";
+      const { cleaned, artifacts } = extractArtifacts(assistantContent, asstId);
+      if (artifacts.length > 0) {
+        for (const artifact of artifacts) {
+          get().openArtifact(artifact);
+        }
+        set((s) => {
+          const c = s.chats[localId];
+          if (!c) return s;
+          const msgs = c.messages.map((m) =>
+            m.id === asstId
+              ? {
+                  ...m,
+                  content: cleaned || `Created ${artifacts.length} artifact${artifacts.length > 1 ? "s" : ""} in the sidebar.`,
+                }
+              : m,
+          );
+          return {
+            chats: {
+              ...s.chats,
+              [localId]: { ...c, messages: msgs },
+            },
+          };
+        });
+      } else if (artifactMode) {
+        const assistantContent = get().chats[localId]?.messages.find((m) => m.id === asstId)?.content || "";
+        if (inferredArtifactKind && assistantContent.trim()) {
+          const title = userMsgText
+            .replace(/^(create|write|draft|make|generate|build)\s+(a|an|the)?\s*/i, "")
+            .replace(/\b(document|doc|table|sheet|spreadsheet|chart|graph|report|brief|note|summary)\b/i, "")
+            .trim()
+            .slice(0, 40) || {
+              doc: "Document",
+              sheet: "Sheet",
+              graph: "Graph",
+              code: "Code",
+              diff: "Diff",
+              preview: "Preview",
+            }[inferredArtifactKind];
+          const artifact: Artifact = {
+            id: uid(),
+            kind: inferredArtifactKind,
+            title: title || "Artifact",
+            content: sanitizeArtifactContent(assistantContent),
+            createdAt: Date.now(),
+            sourceMessageId: asstId,
+          };
+          if (artifact.kind === "sheet") {
+            artifact.rows = assistantContent
+              .split("\n")
+              .filter((line) => line.trim().length > 0)
+              .map((line) => line.split("\t"));
+          }
+          if (artifact.kind === "graph" && assistantContent.startsWith("data:image/")) {
+            artifact.src = assistantContent.trim();
+          }
+          get().openArtifact(artifact);
+          set((s) => {
+            const c = s.chats[localId];
+            if (!c) return s;
+            const msgs = c.messages.map((m) =>
+              m.id === asstId
+                ? {
+                    ...m,
+                    content: cleaned || `Created a ${artifact.kind} artifact in the sidebar.`,
+                  }
+                : m,
+            );
+            return {
+              chats: {
+                ...s.chats,
+                [localId]: { ...c, messages: msgs },
+              },
+            };
+          });
+        }
+      }
     } catch (e) {
-      set((s) => {
-        const c = s.chats[localId];
-        if (!c) return s;
-        return {
-          chats: {
-            ...s.chats,
-            [localId]: { ...c, working: false, status: undefined, error: String(e) },
-          },
-        };
-      });
+      const isAbort = e instanceof DOMException && e.name === "AbortError";
+      if (!isAbort) {
+        set((s) => {
+          const c = s.chats[localId];
+          if (!c) return s;
+          return {
+            chats: {
+              ...s.chats,
+              [localId]: { ...c, working: false, status: undefined, error: String(e) },
+            },
+          };
+        });
+      }
     } finally {
       set({ _abort: null });
       // Refresh history so the new chat shows up in the sidebar.
@@ -629,6 +844,14 @@ export const useApp = create<AppState>((set, get) => ({
   deleteCustomModel: async (id) => {
     await api.deleteCustomModel(id);
     await Promise.all([get().refreshProviders(), get().refreshSettings()]);
+  },
+
+  updateArtifact: (id, patch) => {
+    set((s) => ({
+      artifacts: s.artifacts.map((artifact) =>
+        artifact.id === id ? { ...artifact, ...patch } : artifact,
+      ),
+    }));
   },
 }));
 

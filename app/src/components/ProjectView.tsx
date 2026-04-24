@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import {
   ArrowLeft,
   MoreHorizontal,
@@ -9,6 +9,8 @@ import {
   Trash2,
   Check,
   X,
+  FolderOpen,
+  Clock,
 } from "lucide-react";
 import { cn } from "../lib/cn";
 import { useApp } from "../lib/store";
@@ -23,9 +25,242 @@ import { api } from "../lib/api";
  */
 export function ProjectView() {
   const activeId = useApp((s) => s.activeProjectId);
+
+  // If no project is selected, show the project list view
+  if (!activeId) {
+    return <ProjectListPage />;
+  }
+
+  return <ProjectDetail />;
+}
+
+// ---- Project List Page ----
+
+function ProjectListPage() {
+  const projects = useApp((s) => s.projects);
+  const [modalOpen, setModalOpen] = useState(false);
+
+  return (
+    <div className="flex h-full w-full flex-col overflow-hidden bg-paper">
+      {projects.length === 0 ? (
+        <div className="flex flex-1 items-center justify-center">
+          <button
+            type="button"
+            onClick={() => setModalOpen(true)}
+            className="press flex flex-col items-center justify-center gap-3 rounded-xl border border-line bg-paper-raised px-10 py-8 text-ink hover:bg-paper-sunken hover:border-line-strong transition-colors"
+          >
+            <Plus className="h-8 w-8 text-ink-muted" />
+            <span className="text-[14px] font-medium text-ink-muted">Create project</span>
+          </button>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto px-8 pt-10 pb-8">
+          <h1 className="text-[28px] font-semibold tracking-tight text-ink">Projects</h1>
+          <div className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {projects.map((p) => (
+              <ProjectCard key={p.id} project={p} />
+            ))}
+          </div>
+        </div>
+      )}
+
+      {modalOpen && <CreateProjectModal onClose={() => setModalOpen(false)} />}
+    </div>
+  );
+}
+
+function CreateProjectModal({ onClose }: { onClose: () => void }) {
+  const createProject = useApp((s) => s.createProject);
+  const setActiveProject = useApp((s) => s.setActiveProject);
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [busy, setBusy] = useState(false);
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    setTimeout(() => nameRef.current?.focus(), 10);
+  }, []);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
+  const handleCreate = async () => {
+    const n = name.trim();
+    if (!n || busy) return;
+    setBusy(true);
+    try {
+      await createProject(n, description.trim() || undefined);
+      const all = useApp.getState().projects;
+      const latest = all[all.length - 1];
+      if (latest) setActiveProject(latest.id);
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/30 animate-fade-in"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-[420px] rounded-2xl border border-line bg-paper-raised shadow-pop"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between border-b border-line px-5 py-3.5">
+          <h2 className="text-[15px] font-semibold text-ink">Create Project</h2>
+          <button
+            type="button"
+            onClick={onClose}
+            className="press rounded-md p-1 text-ink-faint hover:bg-paper-sunken hover:text-ink"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        <div className="px-5 py-4 space-y-4">
+          <div>
+            <label className="block text-[12.5px] font-medium text-ink-muted mb-1.5">
+              Name
+            </label>
+            <input
+              ref={nameRef}
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) void handleCreate();
+              }}
+              placeholder="e.g. Website Redesign"
+              className="w-full rounded-lg border border-line bg-paper px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"
+            />
+          </div>
+          <div>
+            <label className="block text-[12.5px] font-medium text-ink-muted mb-1.5">
+              Description <span className="font-normal text-ink-faint">(optional)</span>
+            </label>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={3}
+              placeholder="What is this project about?"
+              className="block w-full resize-none rounded-lg border border-line bg-paper px-3 py-2 text-[13px] text-ink placeholder:text-ink-faint focus:border-line-strong focus:outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center justify-end gap-2 border-t border-line px-5 py-3.5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="press rounded-md border border-line px-3 py-1.5 text-[12.5px] font-medium text-ink hover:bg-paper-sunken"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleCreate()}
+            disabled={busy || !name.trim()}
+            className="press rounded-md bg-ink px-4 py-1.5 text-[12.5px] font-medium text-paper hover:bg-ink-soft disabled:opacity-40"
+          >
+            {busy ? "Creating…" : "Create Project"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProjectCard({ project }: { project: { id: string; name: string; description: string; updated_at: number } }) {
+  const setActiveProject = useApp((s) => s.setActiveProject);
+  const deleteProject = useApp((s) => s.deleteProject);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const timeAgo = (ts: number) => {
+    const diff = Date.now() - ts;
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return "just now";
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  };
+
+  return (
+    <div className="group relative rounded-2xl border border-line bg-paper-raised p-4 transition-shadow hover:shadow-chat">
+      <button
+        type="button"
+        onClick={() => setActiveProject(project.id)}
+        className="text-left w-full"
+      >
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-paper-sunken">
+            <FolderOpen className="h-4 w-4 text-ink-muted" />
+          </div>
+          <div
+            className="opacity-0 transition-opacity group-hover:opacity-100"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <IconButton
+              icon={<MoreHorizontal />}
+              label="More"
+              size="sm"
+              showTooltip={false}
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpen(!menuOpen);
+              }}
+            />
+          </div>
+        </div>
+        <h3 className="mt-3 truncate text-[14px] font-semibold text-ink">{project.name}</h3>
+        {project.description && (
+          <p className="mt-1 line-clamp-2 text-[12.5px] leading-5 text-ink-muted">{project.description}</p>
+        )}
+        <div className="mt-3 flex items-center gap-1 text-[10.5px] text-ink-faint">
+          <Clock className="h-3 w-3" />
+          <span>{timeAgo(project.updated_at)}</span>
+        </div>
+      </button>
+
+      {/* Context menu */}
+      {menuOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+          <div
+            className="absolute right-3 top-10 z-50 w-[160px] animate-fade-in rounded-xl border border-line-strong bg-paper-raised p-1 shadow-pop"
+            role="menu"
+          >
+            <button
+              type="button"
+              onClick={async () => {
+                await deleteProject(project.id);
+                setMenuOpen(false);
+              }}
+              role="menuitem"
+              className="press flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-[12.5px] text-red-600 hover:bg-red-500/10"
+            >
+              <Trash2 className="h-3.5 w-3.5" /> Delete project
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+// ---- Project Detail Page ----
+
+function ProjectDetail() {
+  const activeId = useApp((s) => s.activeProjectId);
   const projects = useApp((s) => s.projects);
   const chatSummaries = useApp((s) => s.chatSummaries);
-  const setView = useApp((s) => s.setView);
   const setActiveProject = useApp((s) => s.setActiveProject);
   const updateProject = useApp((s) => s.updateProject);
   const openChat = useApp((s) => s.openChat);
@@ -34,6 +269,13 @@ export function ProjectView() {
     () => projects.find((p) => p.id === activeId) || null,
     [projects, activeId],
   );
+
+  if (!project) {
+    // Shouldn't reach here since ProjectView routes to list when no activeId,
+    // but handle gracefully.
+    setActiveProject(null);
+    return null;
+  }
 
   const [starred, setStarred] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -65,21 +307,6 @@ export function ProjectView() {
       })
       .catch(() => {});
   }, [activeId]);
-
-  if (!project) {
-    return (
-      <div className="flex h-full w-full flex-col items-center justify-center gap-3 bg-paper">
-        <p className="text-[14px] text-ink-muted">No project selected</p>
-        <button
-          type="button"
-          onClick={() => setView("settings")}
-          className="press rounded-md border border-line bg-paper-raised px-3 py-1.5 text-[12.5px] text-ink hover:bg-paper-sunken"
-        >
-          Manage projects
-        </button>
-      </div>
-    );
-  }
 
   const projectChats = chatSummaries.filter((c) =>
     project.chat_ids?.includes(c.id),
@@ -123,7 +350,7 @@ export function ProjectView() {
             type="button"
             onClick={() => {
               setActiveProject(null);
-              setView("settings");
+              // Stay on projects view — will render the list page
             }}
             className="press inline-flex items-center gap-1.5 rounded-md px-2 py-1 text-[12.5px] text-ink-muted hover:bg-paper-sunken hover:text-ink"
           >
@@ -341,12 +568,11 @@ function ProjectMenu({
 }) {
   const deleteProject = useApp((s) => s.deleteProject);
   const setActiveProject = useApp((s) => s.setActiveProject);
-  const setView = useApp((s) => s.setView);
 
   const remove = async () => {
     await deleteProject(projectId);
     setActiveProject(null);
-    setView("settings");
+    // Stays on projects view — list page will render
   };
 
   return (

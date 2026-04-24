@@ -24,11 +24,11 @@ const sizes: Record<Size, string> = {
 
 const variants: Record<Variant, string> = {
   ghost:
-    "text-ink-muted hover:text-ink hover:bg-line/60 active:bg-line",
+    "text-ink-muted hover:text-ink hover:bg-line/50 active:bg-line/70",
   soft:
-    "text-ink bg-paper-sunken hover:bg-line/70 active:bg-line",
+    "text-ink bg-paper-sunken hover:bg-paper hover:border-line-strong active:bg-line/60",
   solid:
-    "text-white bg-ink hover:bg-ink-soft disabled:bg-ink/30 disabled:text-white/80",
+    "text-ink bg-paper-sunken border border-line hover:bg-paper hover:border-line-strong disabled:bg-paper-sunken/60 disabled:text-ink-faint",
   outline:
     "text-ink border border-line hover:border-line-strong hover:bg-paper-sunken",
 };
@@ -57,7 +57,7 @@ export const IconButton = forwardRef<HTMLButtonElement, Props>(function IconButt
         "press ring-focus inline-flex items-center justify-center",
         sizes[size],
         variants[variant],
-        active && "bg-line text-ink",
+        active && "bg-paper-sunken text-ink border-line-strong",
         className,
       )}
       {...rest}

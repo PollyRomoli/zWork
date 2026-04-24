@@ -71,10 +71,10 @@ export function AskCard({ payload, onSubmit, submitted, chosenLabel }: AskCardPr
               type="button"
               disabled={submitted}
               onClick={() => toggle(opt.label)}
-              className={cn(
+                className={cn(
                 "press flex items-start gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
                 active
-                  ? "border-ink/30 bg-paper shadow-sm"
+                  ? "border-line-strong bg-paper-sunken shadow-sm"
                   : "border-line hover:border-line-strong hover:bg-paper",
                 submitted && "cursor-default",
               )}
@@ -82,7 +82,7 @@ export function AskCard({ payload, onSubmit, submitted, chosenLabel }: AskCardPr
               <span className={cn(
                 "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
                 multi ? "rounded" : "rounded-full",
-                active ? "border-ink bg-ink text-paper" : "border-line-strong bg-paper",
+                active ? "border-line-strong bg-paper-raised text-ink" : "border-line-strong bg-paper",
               )}>
                 {active && <Check className="h-2.5 w-2.5" />}
               </span>
@@ -107,13 +107,13 @@ export function AskCard({ payload, onSubmit, submitted, chosenLabel }: AskCardPr
             className={cn(
               "press flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors",
               otherActive
-                ? "border-ink/30 bg-paper shadow-sm"
+                ? "border-line-strong bg-paper-sunken shadow-sm"
                 : "border-line hover:border-line-strong hover:bg-paper",
             )}
           >
             <span className={cn(
               "mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-colors",
-              otherActive ? "border-ink bg-ink text-paper" : "border-line-strong bg-paper",
+              otherActive ? "border-line-strong bg-paper-raised text-ink" : "border-line-strong bg-paper",
             )}>
               {otherActive && <Check className="h-2.5 w-2.5" />}
             </span>
@@ -140,7 +140,7 @@ export function AskCard({ payload, onSubmit, submitted, chosenLabel }: AskCardPr
             onClick={submit}
             className={cn(
               "press rounded-full px-4 py-1.5 text-[12px] font-semibold transition-colors",
-              "bg-ink text-paper hover:opacity-90",
+              "border border-line bg-paper-sunken text-ink hover:bg-paper hover:border-line-strong",
               "disabled:opacity-40 disabled:cursor-not-allowed",
             )}
           >
