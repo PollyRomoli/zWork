@@ -1,9 +1,10 @@
-import { useMemo, useState } from "react";
+import { Suspense, lazy, useMemo, useState } from "react";
 import { Download, Clock3 } from "lucide-react";
 import { ChatInput } from "./ChatInput";
-import { LogoParticles } from "./LogoParticles";
 import { useApp } from "../lib/store";
 import { cn } from "../lib/cn";
+
+const LogoParticles = lazy(() => import("./LogoParticles").then((m) => ({ default: m.LogoParticles })));
 
 interface GreetingOption {
   text: string;
@@ -99,13 +100,15 @@ export function Landing({
         )}
         aria-hidden="true"
       >
-        <LogoParticles
-          size={1800}
-          particleCount={12000}
-          pointScale={2.8}
-          spinSpeed={0.00052}
-          fill
-        />
+        <Suspense fallback={null}>
+          <LogoParticles
+            size={1800}
+            particleCount={6500}
+            pointScale={2.35}
+            spinSpeed={0.00052}
+            fill
+          />
+        </Suspense>
       </div>
 
       {/* Main content — centered slightly above vertical middle so the chatbox
@@ -151,7 +154,7 @@ export function Landing({
                     zWork {updateCard.latestVersion}
                   </div>
                   <div className="mt-1 text-[12px] leading-5 text-ink-muted">
-                    A newer release is available for Linux and macOS.
+                    A newer release is available. Update now, then zWork will relaunch.
                   </div>
                 </div>
                 <div className="flex shrink-0 items-center gap-2">

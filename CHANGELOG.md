@@ -2,6 +2,15 @@
 
 All notable changes to zWork are documented here.
 
+## v0.3.0
+
+**Pre-v1 desktop release for macOS, Windows, and Linux.**
+
+- Added a macOS universal release path for one DMG across Intel and Apple Silicon
+- Hardened GitHub Actions release artifacts and updater manifest generation
+- Simplified install scripts for non-technical users
+- Reduced landing screen animation cost to keep first-run and chat entry responsive
+
 ## v0.2.2
 
 **Fix Linux AppImage startup crash on WebKitGTK.**

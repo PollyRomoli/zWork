@@ -15,14 +15,21 @@ ARCH="${HOST_TRIPLE%%-*}"
 DIST_DIR="$ROOT_DIR/dist"
 mkdir -p "$DIST_DIR"
 
+if [[ "$HOST_TRIPLE" == *"universal-apple-darwin"* ]]; then
+  TARGET_RELEASE_DIR="$ROOT_DIR/app/src-tauri/target/universal-apple-darwin/release"
+  ARCH="universal"
+else
+  TARGET_RELEASE_DIR="$ROOT_DIR/app/src-tauri/target/release"
+fi
+
 case "$PLATFORM" in
   linux)
-    BUNDLE_DIR="$ROOT_DIR/app/src-tauri/target/release/bundle/appimage"
+    BUNDLE_DIR="$TARGET_RELEASE_DIR/bundle/appimage"
     out="$DIST_DIR/zWork-linux-${ARCH}.AppImage"
     sig_out="$DIST_DIR/zWork-linux-${ARCH}.AppImage.sig"
     ;;
   macos)
-    BUNDLE_DIR="$ROOT_DIR/app/src-tauri/target/release/bundle"
+    BUNDLE_DIR="$TARGET_RELEASE_DIR/bundle"
     dmg_dir="$BUNDLE_DIR/dmg"
     macos_dir="$BUNDLE_DIR/macos"
     src="$(find "$dmg_dir" -maxdepth 1 -name '*.dmg' | head -n 1)"
@@ -32,7 +39,7 @@ case "$PLATFORM" in
     updater_sig_out="$DIST_DIR/zWork-macos-${ARCH}.app.tar.gz.sig"
     ;;
   windows)
-    BUNDLE_DIR="$ROOT_DIR/app/src-tauri/target/release/bundle/nsis"
+    BUNDLE_DIR="$TARGET_RELEASE_DIR/bundle/nsis"
     src="$(find "$BUNDLE_DIR" -maxdepth 1 -name '*_x64-setup.exe' | head -n 1)"
     out="$DIST_DIR/zWork-windows-${ARCH}-setup.exe"
     sig_out="$DIST_DIR/zWork-windows-${ARCH}-setup.exe.sig"

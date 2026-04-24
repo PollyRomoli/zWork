@@ -23,6 +23,22 @@ type SampledCloud = {
   glow: Float32Array;
 };
 
+const sampledCloudCache = new Map<number, Promise<SampledCloud>>();
+
+function prefersReducedMotion(): boolean {
+  return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
+
+function getSampledCloud(count: number): Promise<SampledCloud> {
+  const normalizedCount = Math.max(900, Math.min(count, 12000));
+  const cached = sampledCloudCache.get(normalizedCount);
+  if (cached) return cached;
+
+  const promise = sampleLogoCloud(normalizedCount);
+  sampledCloudCache.set(normalizedCount, promise);
+  return promise;
+}
+
 function createLogoSvgMarkup(fill: string): string {
   const slats = 6;
   const radius = 12.5;
@@ -179,20 +195,25 @@ export function LogoParticles({
     let points: THREE.Points | null = null;
     let spinGroup: THREE.Group | null = null;
     let themeObs: MutationObserver | null = null;
+    let resizeObs: ResizeObserver | null = null;
     let timer: THREE.Timer | null = null;
+    let bootTimer = 0;
     let raf = 0;
 
     const boot = async () => {
       try {
-        const cloud = await sampleLogoCloud(
-          Math.max(1200, Math.min(particleCount, 18000)),
-        );
+        if (prefersReducedMotion()) {
+          setRenderFailed(true);
+          return;
+        }
+
+        const cloud = await getSampledCloud(particleCount);
         if (cancelled || !mount) return;
 
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
+        const dpr = Math.min(window.devicePixelRatio || 1, fill ? 1.5 : 2);
         const w = fill ? mount.clientWidth : size;
         const h = fill ? mount.clientHeight : size;
-        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+        renderer = new THREE.WebGLRenderer({ alpha: true, antialias: !fill });
         renderer.setPixelRatio(dpr);
         renderer.setSize(w, h, false);
         renderer.setClearColor(0x000000, 0);
@@ -314,6 +335,20 @@ export function LogoParticles({
         timer = new THREE.Timer();
         timer.connect(document);
         const angularVelocity = spinSpeed * 165;
+        const resize = () => {
+          if (!fill || !mount || !renderer || !camera) return;
+          const width = mount.clientWidth;
+          const height = mount.clientHeight;
+          if (width <= 0 || height <= 0) return;
+          camera.aspect = width / height;
+          camera.updateProjectionMatrix();
+          renderer.setSize(width, height, false);
+        };
+
+        resizeObs =
+          fill && "ResizeObserver" in window ? new ResizeObserver(resize) : null;
+        resizeObs?.observe(mount);
+
         const tick = () => {
           if (
             cancelled ||
@@ -340,12 +375,16 @@ export function LogoParticles({
       }
     };
 
-    void boot();
+    bootTimer = window.setTimeout(() => {
+      void boot();
+    }, 40);
 
     return () => {
       cancelled = true;
+      window.clearTimeout(bootTimer);
       cancelAnimationFrame(raf);
       themeObs?.disconnect();
+      resizeObs?.disconnect();
       timer?.dispose();
       geometry?.dispose();
       material?.dispose();

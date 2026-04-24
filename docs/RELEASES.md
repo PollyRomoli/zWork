@@ -41,7 +41,7 @@ Linux installs point the symlink directly at the `.AppImage` file.
 
 Preferred format:
 
-- `.dmg`
+- universal `.dmg` for Intel and Apple Silicon
 
 Build flow:
 
@@ -49,8 +49,21 @@ Build flow:
 ./scripts/build-macos-release.sh
 ```
 
+GitHub Actions uses:
+
+```bash
+./scripts/build-macos-universal-release.sh
+```
+
+That script expects both macOS backend sidecars, combines them with `lipo`, runs
+Tauri's `universal-apple-darwin` build, and copies:
+
+- `dist/zWork-macos-universal.dmg`
+- `dist/zWork-macos-universal.app.tar.gz`
+- `dist/zWork-macos-universal.app.tar.gz.sig`
+
 The macOS installer flow uses the same `install.sh` script, downloads the
-latest DMG, mounts it, and copies the app bundle into `/Applications`.
+universal DMG, mounts it, and copies the app bundle into `/Applications`.
 
 ## Windows packaging
 
@@ -108,6 +121,9 @@ Suggested names:
 - `zWork-linux-aarch64.AppImage`
 - `zWork-linux-x86_64.AppImage.sig`
 - `zWork-linux-aarch64.AppImage.sig`
+- `zWork-macos-universal.dmg`
+- `zWork-macos-universal.app.tar.gz`
+- `zWork-macos-universal.app.tar.gz.sig`
 - `zWork-macos-x86_64.dmg`
 - `zWork-macos-aarch64.dmg`
 - `zWork-macos-x86_64.app.tar.gz`
@@ -133,6 +149,8 @@ Release requirements:
   set in GitHub Actions secrets for release builds
 - `scripts/generate-updater-manifest.py` writes `dist/latest.json` from the
   platform updater artifacts and signatures
+- the macOS universal updater archive is intentionally mapped to both
+  `darwin-x86_64` and `darwin-aarch64` in `latest.json`
 
 To create a new keypair:
 

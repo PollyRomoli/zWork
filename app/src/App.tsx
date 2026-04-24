@@ -1,16 +1,17 @@
-import { useEffect, useState } from "react";
+import { Suspense, lazy, useEffect, useState } from "react";
 import appPackage from "../package.json";
 import { Sidebar } from "./components/Sidebar";
 import { Landing } from "./components/Landing";
-import { ChatView } from "./components/ChatView";
-import { SettingsPage } from "./components/Settings";
-import { SearchModal } from "./components/SearchModal";
-import { Onboarding } from "./components/Onboarding";
-import { ProjectView } from "./components/ProjectView";
-import { ArtifactPanel } from "./components/ArtifactPanel";
 import { useApp } from "./lib/store";
 import { detectUpdate, installUpdate } from "./lib/update";
 import { cn } from "./lib/cn";
+
+const Onboarding = lazy(() => import("./components/Onboarding").then((m) => ({ default: m.Onboarding })));
+const ChatView = lazy(() => import("./components/ChatView").then((m) => ({ default: m.ChatView })));
+const SettingsPage = lazy(() => import("./components/Settings").then((m) => ({ default: m.SettingsPage })));
+const SearchModal = lazy(() => import("./components/SearchModal").then((m) => ({ default: m.SearchModal })));
+const ProjectView = lazy(() => import("./components/ProjectView").then((m) => ({ default: m.ProjectView })));
+const ArtifactPanel = lazy(() => import("./components/ArtifactPanel").then((m) => ({ default: m.ArtifactPanel })));
 
 export default function App() {
   const appVersion = appPackage.version;
@@ -102,6 +103,13 @@ export default function App() {
   const showChatLoading = view === "chat" && !!active && !chat;
   const [showLandingOverlay, setShowLandingOverlay] = useState(showLanding);
   const [particlesExiting, setParticlesExiting] = useState(false);
+  const panelFallback = (
+    <div className="flex h-full w-full items-center justify-center bg-paper">
+      <div className="rounded-2xl border border-line bg-paper-raised px-4 py-2 text-[12.5px] text-ink-muted">
+        Loading…
+      </div>
+    </div>
+  );
 
   useEffect(() => {
     if (showLanding) {
@@ -121,7 +129,11 @@ export default function App() {
   // Show onboarding when we know it's NOT done. `null` = still loading; render
   // nothing then to avoid flash.
   if (onboardingDone === false) {
-    return <Onboarding />;
+    return (
+      <Suspense fallback={<div className="h-screen w-screen bg-paper" />}>
+        <Onboarding />
+      </Suspense>
+    );
   }
   if (onboardingDone === null) {
     return <div className="h-screen w-screen bg-paper" />;
@@ -132,9 +144,13 @@ export default function App() {
       <Sidebar />
       <main className="relative flex min-w-0 flex-1 overflow-hidden">
         {view === "settings" ? (
-          <SettingsPage />
+          <Suspense fallback={panelFallback}>
+            <SettingsPage />
+          </Suspense>
         ) : view === "projects" ? (
-          <ProjectView />
+          <Suspense fallback={panelFallback}>
+            <ProjectView />
+          </Suspense>
         ) : showChatLoading ? (
           <div className="flex h-full w-full items-center justify-center bg-paper">
             <div className="rounded-2xl border border-line bg-paper-raised px-4 py-2 text-[12.5px] text-ink-muted">
@@ -143,7 +159,11 @@ export default function App() {
           </div>
         ) : (
           <>
-            {!showLanding && <ChatView />}
+            {!showLanding && (
+              <Suspense fallback={panelFallback}>
+                <ChatView />
+              </Suspense>
+            )}
             {showLandingOverlay && (
               <div
                 className={cn(
@@ -163,8 +183,14 @@ export default function App() {
           </>
         )}
       </main>
-      {artifactPanelOpen && <ArtifactPanel />}
-      <SearchModal />
+      {artifactPanelOpen && (
+        <Suspense fallback={null}>
+          <ArtifactPanel />
+        </Suspense>
+      )}
+      <Suspense fallback={null}>
+        <SearchModal />
+      </Suspense>
     </div>
   );
 }

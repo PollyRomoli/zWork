@@ -13,12 +13,14 @@ case "$ARCH" in
 esac
 
 asset_name=""
+asset_names=()
 case "$OS" in
   linux)
     asset_name="zWork-linux-${ARCH}.AppImage"
+    asset_names=("$asset_name")
     ;;
   darwin)
-    asset_name="zWork-macos-${ARCH}.dmg"
+    asset_names=("zWork-macos-universal.dmg" "zWork-macos-${ARCH}.dmg")
     ;;
   *)
     echo "unsupported platform: $OS" >&2
@@ -26,30 +28,22 @@ case "$OS" in
     ;;
 esac
 
-release_json="$(curl -fsSL "https://api.github.com/repos/${REPO}/releases/latest")"
-download_url="$(RELEASE_JSON="$release_json" python3 - "$asset_name" <<'PY'
-import json
-import os
-import sys
-
-asset_name = sys.argv[1]
-data = json.loads(os.environ["RELEASE_JSON"])
-for asset in data.get("assets", []):
-    if asset.get("name") == asset_name:
-        print(asset.get("browser_download_url", ""))
-        break
-PY
-)"
-
-if [[ -z "$download_url" ]]; then
-  echo "could not find asset: $asset_name" >&2
-  exit 1
-fi
-
 tmp_dir="$(mktemp -d)"
 trap 'rm -rf "$tmp_dir"' EXIT
-download_path="$tmp_dir/$asset_name"
-curl -fL "$download_url" -o "$download_path"
+download_path=""
+for candidate in "${asset_names[@]}"; do
+  candidate_path="$tmp_dir/$candidate"
+  if curl -fL "https://github.com/${REPO}/releases/latest/download/${candidate}" -o "$candidate_path"; then
+    asset_name="$candidate"
+    download_path="$candidate_path"
+    break
+  fi
+done
+
+if [[ -z "$download_path" ]]; then
+  echo "could not download a zWork release asset for ${OS}/${ARCH}" >&2
+  exit 1
+fi
 
 mkdir -p "$INSTALL_ROOT" "$BIN_DIR"
 

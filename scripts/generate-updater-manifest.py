@@ -19,20 +19,22 @@ def changelog_section(changelog: Path, version: str) -> str:
     return match.group(1).strip() if match else "See CHANGELOG.md for details."
 
 
-def platform_key(asset_name: str) -> str | None:
+def platform_keys(asset_name: str) -> list[str]:
     if asset_name.endswith(".AppImage"):
         m = re.search(r"zWork-linux-([^.]+)\.AppImage$", asset_name)
         if m:
-            return f"linux-{m.group(1)}"
+            return [f"linux-{m.group(1)}"]
     if asset_name.endswith(".app.tar.gz"):
+        if asset_name == "zWork-macos-universal.app.tar.gz":
+            return ["darwin-x86_64", "darwin-aarch64"]
         m = re.search(r"zWork-macos-([^.]+)\.app\.tar\.gz$", asset_name)
         if m:
-            return f"darwin-{m.group(1)}"
+            return [f"darwin-{m.group(1)}"]
     if asset_name.endswith("-setup.exe"):
         m = re.search(r"zWork-windows-([^-]+)-setup\.exe$", asset_name)
         if m:
-            return f"windows-{m.group(1)}"
-    return None
+            return [f"windows-{m.group(1)}"]
+    return []
 
 
 def paired_signature(path: Path) -> str:
@@ -72,13 +74,15 @@ def main() -> int:
             continue
         if asset.name.endswith(".sig") or asset.name == "latest.json":
             continue
-        key = platform_key(asset.name)
-        if key is None:
+        keys = platform_keys(asset.name)
+        if not keys:
             continue
-        manifest["platforms"][key] = {
-            "url": f"{base_url}/{asset.name}",
-            "signature": paired_signature(asset),
-        }
+        signature = paired_signature(asset)
+        for key in keys:
+            manifest["platforms"][key] = {
+                "url": f"{base_url}/{asset.name}",
+                "signature": signature,
+            }
 
     if not manifest["platforms"]:
         raise SystemExit("no updater-capable assets found in dist/")

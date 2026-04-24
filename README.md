@@ -30,11 +30,11 @@ curl -fsSL https://raw.githubusercontent.com/Ryz3nPlayZ/zWork/main/scripts/insta
 
 ### macOS
 
-Download the latest `.dmg` from [GitHub Releases](https://github.com/Ryz3nPlayZ/zWork/releases), open it, and drag zWork to your Applications folder.
+Download `zWork-macos-universal.dmg` from [GitHub Releases](https://github.com/Ryz3nPlayZ/zWork/releases), open it, and drag zWork to your Applications folder. The same DMG works on Intel and Apple Silicon Macs.
 
 ### Windows
 
-Download the latest installer from [GitHub Releases](https://github.com/Ryz3nPlayZ/zWork/releases) and run it.
+Download `zWork-windows-x86_64-setup.exe` from [GitHub Releases](https://github.com/Ryz3nPlayZ/zWork/releases) and run it.
 
 Or via PowerShell:
 
