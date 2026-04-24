@@ -105,6 +105,10 @@ async function j<T>(r: Response): Promise<T> {
   return (await r.json()) as T;
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
 export interface MeResponse {
   name: string;
   os: string;
@@ -166,6 +170,21 @@ export interface UploadedFile {
 
 export const api = {
   health: () => fetch(u("/api/health")).then((r) => j<{ ok: boolean }>(r)),
+
+  waitForBackend: async (attempts = 18) => {
+    let lastError: unknown = null;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        return await api.health();
+      } catch (err) {
+        lastError = err;
+        await sleep(i < 4 ? 250 : 600);
+      }
+    }
+    throw lastError instanceof Error
+      ? lastError
+      : new Error("Backend did not become ready.");
+  },
 
   me: () => fetch(u("/api/me")).then((r) => j<MeResponse>(r)),
 

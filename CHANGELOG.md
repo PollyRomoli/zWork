@@ -2,6 +2,16 @@
 
 All notable changes to zWork are documented here.
 
+## v0.3.2
+
+**Patch universal macOS backend launch and restore optimized onboarding dither.**
+
+- Replaced the lipo-merged macOS backend with an architecture-selecting launcher
+- Shipped both Intel and Apple Silicon backend binaries inside the universal app
+- Restored the onboarding dither as a low-resolution canvas renderer instead of WebGL
+- Centered the “Your agent for…” visual within the left onboarding area
+- Added backend readiness retry and clearer onboarding setup errors
+
 ## v0.3.1
 
 **Patch onboarding performance and first-run model setup.**

@@ -6,6 +6,7 @@ import { cn } from "../lib/cn";
 import { useApp } from "../lib/store";
 import { useResolvedTheme } from "../lib/theme";
 import { api, type OnboardingAnswer, type OnboardingCredential } from "../lib/api";
+import Dither from "./Dither";
 
 const PREV1_OLLAMA_MODEL_ID = "minimax-m2.7:cloud";
 
@@ -362,6 +363,7 @@ export function Onboarding() {
       answer: answers[qq.key] || "",
     }));
     try {
+      await api.waitForBackend();
       await api.onboardComplete({
         answers: payload,
         credential: credential || undefined,
@@ -373,12 +375,23 @@ export function Onboarding() {
     } catch (err) {
       console.error(err);
       setFinalizing(false);
-      setError("Setup did not save. Check the model key/base URL and try again.");
+      const detail = err instanceof Error ? err.message : String(err);
+      setError(`Setup did not save. ${friendlySetupError(detail)}`);
     }
   };
 
   const onSubmitCredential = (c: OnboardingCredential | null) => {
     setCredential(c);
+  };
+
+  const friendlySetupError = (detail: string) => {
+    if (/failed to fetch|load failed|networkerror|did not become ready/i.test(detail)) {
+      return "The local backend is not ready. Quit and reopen zWork; if it repeats, send the backend.log file.";
+    }
+    if (/address already in use|eaddrinuse/i.test(detail)) {
+      return "Another zWork backend is already running on port 8787. Quit all zWork windows and reopen the app.";
+    }
+    return detail || "Check the model key/base URL and try again.";
   };
 
   // Keyboard: Enter advances, Shift+Enter (or Escape for optional) skips.
@@ -430,7 +443,21 @@ export function Onboarding() {
       ref={rootRef}
       className="onboarding-shell relative flex h-full min-h-screen min-w-0 flex-1 flex-col overflow-hidden bg-paper"
     >
-      <OnboardingBackdrop theme={theme} baseColor={baseColor} waveColor={waveColor} />
+      <div className="pointer-events-none absolute inset-0 z-0">
+        <Dither
+          key={theme}
+          waveColor={waveColor}
+          baseColor={baseColor}
+          waveSpeed={0.018}
+          waveFrequency={3.4}
+          waveAmplitude={0.22}
+          colorNum={3}
+          pixelSize={2}
+          disableAnimation={false}
+          enableMouseInteraction={false}
+          mouseRadius={0.3}
+        />
+      </div>
 
       {/* Subtle gradient that fades the dither toward the card side so text
           on the card always has breathing room. */}
@@ -448,10 +475,10 @@ export function Onboarding() {
       <div className="titlebar-drag absolute inset-x-0 top-0 z-10 h-10" />
 
       {/* Content area — card spans full viewport height, pinned right. */}
-      <div className="relative z-20 flex h-full flex-1 items-center justify-between p-5 md:p-6">
+      <div className="relative z-20 flex h-full flex-1 items-center p-5 md:p-6">
         
         {/* Left side visual */}
-        <div className="hidden lg:flex flex-1 flex-col items-center justify-center select-none">
+        <div className="absolute inset-y-6 left-6 right-[560px] hidden select-none flex-col items-center justify-center lg:flex xl:right-[600px]">
           <OnboardingVisual />
         </div>
 
@@ -618,50 +645,6 @@ function ProgressDots({ step, total }: { step: number; total: number }) {
       ))}
     </div>
   );
-}
-
-function OnboardingBackdrop({
-  theme,
-  baseColor,
-  waveColor,
-}: {
-  theme: "light" | "dark";
-  baseColor: [number, number, number];
-  waveColor: [number, number, number];
-}) {
-  const base = toRgb(baseColor);
-  const wave = toRgb(waveColor);
-  const opacity = theme === "dark" ? 0.42 : 0.26;
-
-  return (
-    <div
-      className="pointer-events-none absolute inset-0 z-0 overflow-hidden"
-      aria-hidden="true"
-      style={{
-        backgroundColor: `rgb(${base})`,
-        backgroundImage: [
-          `radial-gradient(circle at 18% 22%, rgb(${wave} / ${opacity}) 0 1px, transparent 1.7px)`,
-          `radial-gradient(circle at 68% 56%, rgb(${wave} / ${opacity * 0.75}) 0 1px, transparent 1.8px)`,
-          `linear-gradient(135deg, rgb(${wave} / ${opacity * 0.4}), transparent 45%)`,
-        ].join(", "),
-        backgroundSize: "10px 10px, 14px 14px, 100% 100%",
-      }}
-    >
-      <div
-        className="absolute -inset-[12%] animate-onboarding-drift opacity-80"
-        style={{
-          background:
-            `conic-gradient(from 210deg at 34% 48%, transparent 0deg, rgb(${wave} / ${opacity}) 70deg, transparent 145deg, rgb(${wave} / ${opacity * 0.45}) 230deg, transparent 315deg)`,
-          filter: "blur(46px)",
-          transform: "translateZ(0)",
-        }}
-      />
-    </div>
-  );
-}
-
-function toRgb(rgb: [number, number, number]) {
-  return rgb.map((v) => Math.round(v * 255)).join(" ");
 }
 
 /** A container that smoothly resizes its height when children change. */
