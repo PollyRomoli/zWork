@@ -2,6 +2,14 @@
 
 All notable changes to zWork are documented here.
 
+## v0.2.2
+
+**Fix Linux AppImage startup crash on WebKitGTK.**
+
+- Added Linux WebKitGTK fallback environment flags at startup
+- Fixed packaged backend imports so the release binary starts cleanly under PyInstaller
+- Kept the updater/release flow aligned with signed GitHub Releases
+
 ## v0.2.0
 
 **Cross-platform support — now available on Windows.**

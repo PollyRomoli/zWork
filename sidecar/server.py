@@ -18,12 +18,20 @@ from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from .agent import chatstore, detect, providers, skills as skills_mod
-from .agent import settings as settings_mod
-from .agent import home as home_mod
-from .agent import projects as projects_mod
-from .agent.env_loader import load_dotenv
-from .core.util import new_id
+try:
+    from .agent import chatstore, detect, providers, skills as skills_mod
+    from .agent import settings as settings_mod
+    from .agent import home as home_mod
+    from .agent import projects as projects_mod
+    from .agent.env_loader import load_dotenv
+    from .core.util import new_id
+except ImportError:  # pragma: no cover - PyInstaller/script entrypoint fallback
+    from sidecar.agent import chatstore, detect, providers, skills as skills_mod
+    from sidecar.agent import settings as settings_mod
+    from sidecar.agent import home as home_mod
+    from sidecar.agent import projects as projects_mod
+    from sidecar.agent.env_loader import load_dotenv
+    from sidecar.core.util import new_id
 
 # Load .env from repo root (optional).
 load_dotenv()
