@@ -94,22 +94,32 @@ export function Landing({
       {/* Galaxy backdrop behind the welcome block. */}
       <div
         className={cn(
-          "pointer-events-none absolute inset-0 opacity-[0.15] blur-[0.3px]",
+          "pointer-events-none absolute inset-0 opacity-[0.34] blur-0",
           "transition-[opacity,filter] duration-300 ease-out",
-          particlesExiting && "opacity-0 blur-[12px]",
+          particlesExiting && "opacity-0 blur-[10px]",
         )}
         aria-hidden="true"
       >
         <Suspense fallback={null}>
           <LogoParticles
             size={1800}
-            particleCount={6500}
-            pointScale={2.35}
-            spinSpeed={0.00052}
+            particleCount={7200}
+            pointScale={2.6}
+            spinSpeed={0.00056}
             fill
           />
         </Suspense>
       </div>
+
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-0",
+          "bg-[radial-gradient(circle_at_center,rgba(255,255,255,0.08)_0%,rgba(255,255,255,0.02)_28%,rgba(255,255,255,0)_58%)]",
+          "transition-opacity duration-300 ease-out",
+          particlesExiting && "opacity-0",
+        )}
+        aria-hidden="true"
+      />
 
       {/* Main content — centered slightly above vertical middle so the chatbox
           lands right below the visual midline. */}
