@@ -2,6 +2,15 @@
 
 All notable changes to zWork are documented here.
 
+## v0.3.10
+
+**Make telemetry default-on and fix update handoff.**
+
+- Enabled anonymous telemetry by default for new installs while keeping the opt-out toggle in Settings
+- Removed the onboarding telemetry opt-in step so users do not have to answer it during setup
+- Fixed the update card fallback so clicking it opens the release page reliably when native install is unavailable
+- Added a visible opening state so the updater does not appear to do nothing after a click
+
 ## v0.3.9
 
 **Remove broken landing particles and add anonymous analytics opt-in.**

@@ -4,7 +4,7 @@ import appPackage from "../package.json";
 import { Sidebar } from "./components/Sidebar";
 import { Landing } from "./components/Landing";
 import { useApp } from "./lib/store";
-import { consumeInstalledUpdateNotice, detectUpdate, installUpdate, type UpdateCardState, type UpdateProgress } from "./lib/update";
+import { consumeInstalledUpdateNotice, detectUpdate, installUpdate, openReleaseUrl, type UpdateCardState, type UpdateProgress } from "./lib/update";
 import { cn } from "./lib/cn";
 import { recordTelemetry, setTelemetryEnabled, startTelemetrySession, stopTelemetrySession } from "./lib/telemetry";
 
@@ -111,17 +111,19 @@ export default function App() {
     });
     setUpdateProgress({ phase: "checking" });
     try {
-      const result = await installUpdate(updateCard, setUpdateProgress);
-      if (!result.ok && updateCard.source === "github" && updateCard.releaseUrl) {
-        recordTelemetry("update_failed", {
+      if (updateCard.source === "github") {
+        setUpdateProgress({ phase: "opening" });
+        await openReleaseUrl(updateCard.releaseUrl);
+        setUpdateProgress({ phase: "idle" });
+        recordTelemetry("update_finished", {
           current_version: updateCard.currentVersion,
           latest_version: updateCard.latestVersion,
           source: updateCard.source,
-          reason: "github_fallback",
+          mode: "release_page",
         });
-        window.open(updateCard.releaseUrl, "_blank", "noreferrer");
-        setUpdateProgress({ phase: "idle" });
+        return;
       }
+      const result = await installUpdate(updateCard, setUpdateProgress);
       if (!result.ok && updateCard.source === "updater") {
         recordTelemetry("update_failed", {
           current_version: updateCard.currentVersion,
@@ -268,7 +270,9 @@ export default function App() {
                 zWork {recentUpdateNotice.version} installed.{" "}
                 <button
                   type="button"
-                  onClick={() => window.open(recentUpdateNotice.releaseUrl, "_blank", "noreferrer")}
+                  onClick={() => {
+                    void openReleaseUrl(recentUpdateNotice.releaseUrl);
+                  }}
                   className="inline-flex items-center gap-1 font-medium text-ink underline underline-offset-2"
                 >
                   View changelog <ExternalLink className="h-3.5 w-3.5" />

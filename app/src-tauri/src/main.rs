@@ -251,6 +251,11 @@ fn spawn_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
     start_dev_backend()
 }
 
+#[tauri::command]
+fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
+    app.shell().open(url, None).map_err(|err| err.to_string())
+}
+
 fn main() {
     configure_linux_webview_env();
 
@@ -258,6 +263,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(process_init())
         .plugin(UpdaterBuilder::new().build())
+        .invoke_handler(tauri::generate_handler![open_external])
         .manage(Backend(Mutex::new(None)))
         .build(tauri::generate_context!())
         .expect("error while building zWork");

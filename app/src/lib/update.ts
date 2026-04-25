@@ -1,3 +1,4 @@
+import { invoke } from "@tauri-apps/api/core";
 import { check } from "@tauri-apps/plugin-updater";
 import { relaunch } from "@tauri-apps/plugin-process";
 import type { DownloadEvent } from "@tauri-apps/plugin-updater";
@@ -15,6 +16,7 @@ export type UpdateProgress =
   | { phase: "checking" }
   | { phase: "downloading"; downloadedBytes: number; totalBytes: number | null }
   | { phase: "installing" }
+  | { phase: "opening" }
   | { phase: "relaunching" }
   | { phase: "error"; message: string };
 
@@ -138,6 +140,10 @@ export async function installUpdate(
     onProgress?.({ phase: "error", message });
     return { ok: false, message };
   }
+}
+
+export async function openReleaseUrl(url: string): Promise<void> {
+  await invoke("open_external", { url });
 }
 
 export function consumeInstalledUpdateNotice(currentVersion: string): {

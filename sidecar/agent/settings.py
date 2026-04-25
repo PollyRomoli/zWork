@@ -284,7 +284,7 @@ class Settings:
 
     default_model: str = ""  # zWork model id (empty = first available)
     use_claude_code_config: bool = True
-    telemetry_enabled: bool = False
+    telemetry_enabled: bool = True
     telemetry_install_id: str = ""
 
     custom_models: list[dict[str, Any]] = field(default_factory=list)
@@ -298,12 +298,13 @@ def load() -> Settings:
         data = json.loads(p.read_text())
     except Exception:
         return Settings()
+    telemetry_raw = data.get("telemetry_enabled")
     return Settings(
         api_keys=dict(data.get("api_keys") or {}),
         provider_config={k: dict(v) for k, v in (data.get("provider_config") or {}).items()},
         default_model=str(data.get("default_model") or ""),
         use_claude_code_config=bool(data.get("use_claude_code_config", True)),
-        telemetry_enabled=bool(data.get("telemetry_enabled", False)),
+        telemetry_enabled=True if telemetry_raw is None else bool(telemetry_raw),
         telemetry_install_id=str(data.get("telemetry_install_id") or ""),
         custom_models=list(data.get("custom_models") or []),
     )

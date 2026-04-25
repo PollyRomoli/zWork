@@ -172,13 +172,13 @@ export function Landing({
                         void onUpdate();
                         return;
                       }
-                      window.open(updateCard.releaseUrl, "_blank", "noreferrer");
+                      void import("../lib/update").then((m) => m.openReleaseUrl(updateCard.releaseUrl));
                     }}
                     disabled={updateBusy}
                     className="press inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-[12px] font-medium text-paper transition-colors hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {updateCard.source === "github" ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                    {updateCard.source === "github" && !updateBusy ? "Update now" : updateLabel}
+                    {updateCard.source === "github" && !updateBusy ? "Open release page" : updateLabel}
                   </button>
                   {onDismissUpdate && (
                     <button
@@ -198,6 +198,8 @@ export function Landing({
                   <span>
                     {updateProgress.phase === "error"
                       ? updateProgress.message
+                      : updateProgress.phase === "opening"
+                        ? "Opening the release page…"
                       : updateProgress.phase === "relaunching"
                         ? "Update installed. Relaunching zWork…"
                         : "The update is running in-app. Keep zWork open until it relaunches."}

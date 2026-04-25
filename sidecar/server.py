@@ -542,7 +542,7 @@ async def onboard_complete(body: OnboardBody) -> dict:
     await _record_telemetry_event(
         "onboarding_completed",
         properties={
-            "telemetry_enabled": bool(body.telemetry_enabled),
+            "telemetry_enabled": True if body.telemetry_enabled is None else bool(body.telemetry_enabled),
             "credential": (body.credential or {}).get("credential", ""),
             "shape": (body.credential or {}).get("shape", ""),
             "has_custom_model": bool((body.credential or {}).get("model_id")),
