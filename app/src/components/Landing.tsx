@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Clock3, Download, ExternalLink, RefreshCw } from "lucide-react";
+import { Download, RefreshCw } from "lucide-react";
 import { ChatInput } from "./ChatInput";
 import { useApp } from "../lib/store";
 import { useResolvedTheme } from "../lib/theme";
@@ -85,18 +85,6 @@ export function Landing({
   const greeting = useMemo(() => pickGreeting(), []);
   const updateBusy = updateProgress.phase !== "idle" && updateProgress.phase !== "error";
   const macOS = isMacOS();
-  const updateLabel =
-    updateProgress.phase === "checking"
-      ? "Checking…"
-      : updateProgress.phase === "downloading"
-        ? updateProgress.totalBytes && updateProgress.totalBytes > 0
-          ? `Updating… ${Math.max(1, Math.min(99, Math.round((updateProgress.downloadedBytes / updateProgress.totalBytes) * 100)))}%`
-          : "Downloading…"
-        : updateProgress.phase === "installing"
-          ? "Installing…"
-          : updateProgress.phase === "relaunching"
-            ? "Relaunching…"
-            : "Update now";
 
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col bg-paper">
@@ -111,7 +99,7 @@ export function Landing({
         aria-hidden="true"
       >
         <LightRays
-          raysOrigin="bottom-center"
+          raysOrigin="top-center"
           raysColor={theme === "dark" ? "#ffffff" : "#e9e3d2"}
           raysSpeed={0.42}
           lightSpread={0.72}
@@ -163,15 +151,15 @@ export function Landing({
           </div>
 
           {updateCard && (
-            <div className="mt-4 w-full max-w-[560px] rounded-2xl border border-line bg-paper-raised px-4 py-3 shadow-sm">
-              <div className="flex flex-wrap items-center gap-3">
-                <div className="min-w-0 flex-1 text-[12.5px] text-ink">
-                  <span className="font-medium">An update is available.</span>{" "}
-                  <span className="text-ink-muted">
-                    {updateCard.currentVersion} {"->"} {updateCard.latestVersion}
+            <div className="mt-3 w-full max-w-[480px] rounded-lg border border-line/50 bg-paper/50 px-3 py-2 shadow-xs backdrop-blur-sm">
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="min-w-0 flex-1 text-[11.5px] text-ink-muted">
+                  <span className="text-ink">Update available</span>
+                  <span className="text-ink-dim ml-1">
+                    {updateCard.currentVersion} → {updateCard.latestVersion}
                   </span>
                 </div>
-                <div className="flex shrink-0 items-center gap-2" data-no-drag>
+                <div className="flex shrink-0 items-center gap-1.5" data-no-drag>
                   <button
                     type="button"
                     onClick={() => {
@@ -182,34 +170,41 @@ export function Landing({
                       void import("../lib/update").then((m) => m.openReleaseUrl(updateCard.releaseUrl));
                     }}
                     disabled={updateBusy}
-                    className="press inline-flex items-center gap-1.5 rounded-full bg-ink px-3 py-1.5 text-[12px] font-medium text-paper transition-colors hover:bg-ink-soft disabled:cursor-not-allowed disabled:opacity-60"
+                    className="press inline-flex items-center gap-1 rounded-full bg-ink/90 px-2.5 py-1 text-[11px] font-medium text-paper transition-colors hover:bg-ink disabled:cursor-not-allowed disabled:opacity-60"
                   >
-                    {updateCard.source === "github" ? <ExternalLink className="h-3.5 w-3.5" /> : <Download className="h-3.5 w-3.5" />}
-                    {updateCard.source === "github" && !updateBusy ? "Open release page" : updateLabel}
+                    {updateBusy ? (
+                      <>
+                        <RefreshCw className="h-3 w-3 animate-spin" />
+                      </>
+                    ) : (
+                      <>
+                        <Download className="h-3 w-3" />
+                        Update
+                      </>
+                    )}
                   </button>
                   {onDismissUpdate && (
                     <button
                       type="button"
                       onClick={onDismissUpdate}
-                      className="press inline-flex items-center gap-1.5 rounded-full border border-line bg-paper px-3 py-1.5 text-[12px] font-medium text-ink-muted hover:bg-paper-sunken hover:text-ink"
+                      className="press text-[11px] text-ink-dim hover:text-ink transition-colors px-1"
                     >
-                      <Clock3 className="h-3.5 w-3.5" />
-                      Remind me later?
+                      ✕
                     </button>
                   )}
                 </div>
               </div>
               {(updateProgress.phase === "error" || updateBusy) && (
-                <div className="mt-2 flex items-center gap-2 text-[11.5px] text-ink-muted">
-                  <RefreshCw className={cn("h-3.5 w-3.5", updateBusy && "animate-spin")} />
+                <div className="mt-1.5 flex items-center gap-1.5 text-[10.5px] text-ink-dim">
+                  <RefreshCw className={cn("h-3 w-3", updateBusy && "animate-spin")} />
                   <span>
                     {updateProgress.phase === "error"
                       ? updateProgress.message
                       : updateProgress.phase === "opening"
-                        ? "Opening the release page…"
+                        ? "Opening release page…"
                       : updateProgress.phase === "relaunching"
-                        ? "Update installed. Relaunching zWork…"
-                        : "The update is running in-app. Keep zWork open until it relaunches."}
+                        ? "Relaunching…"
+                        : "Updating…"}
                   </span>
                 </div>
               )}

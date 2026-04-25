@@ -111,27 +111,19 @@ export default function App() {
     });
     setUpdateProgress({ phase: "checking" });
     try {
-      if (updateCard.source === "github") {
-        setUpdateProgress({ phase: "opening" });
-        await openReleaseUrl(updateCard.releaseUrl);
-        setUpdateProgress({ phase: "idle" });
-        recordTelemetry("update_finished", {
-          current_version: updateCard.currentVersion,
-          latest_version: updateCard.latestVersion,
-          source: updateCard.source,
-          mode: "release_page",
-        });
-        return;
-      }
+      // Always try the Tauri updater first for seamless in-app updates
       const result = await installUpdate(updateCard, setUpdateProgress);
-      if (!result.ok && updateCard.source === "updater") {
+      if (!result.ok) {
+        // If updater fails, fall back to release page
         recordTelemetry("update_failed", {
           current_version: updateCard.currentVersion,
           latest_version: updateCard.latestVersion,
           source: updateCard.source,
           reason: "updater_error",
         });
-        setUpdateProgress({ phase: "error", message: result.message });
+        setUpdateProgress({ phase: "opening" });
+        await openReleaseUrl(updateCard.releaseUrl);
+        setUpdateProgress({ phase: "idle" });
       } else if (result.ok) {
         recordTelemetry("update_finished", {
           current_version: updateCard.currentVersion,

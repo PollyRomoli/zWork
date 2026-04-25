@@ -127,10 +127,16 @@ function extractArtifacts(text: string, sourceMessageId?: string): { cleaned: st
 
 function inferArtifactKind(text: string): ArtifactKind | null {
   const t = text.toLowerCase();
-  if (/(table|sheet|spreadsheet|csv|tsv|rows|columns)/.test(t)) return "sheet";
-  if (/(chart|graph|plot|visualization|visualise|visualize)/.test(t)) return "graph";
-  if (/(code snippet|script|runnable example|example code)/.test(t)) return "code";
-  if (/(document|doc|brief|report|note|summary|outline|write a|draft a|make a document|create a document)/.test(t)) return "doc";
+  // Only trigger sheet for explicit creation requests or data export
+  if (/(create|make|write|generate|build|export)\s+(a\s+)?(spreadsheet|table|sheet|csv|tsv)/.test(t)) return "sheet";
+  if (/export\s+(to\s+)?(csv|tsv|spreadsheet)/.test(t)) return "sheet";
+  // Graphs are inherently artifact-worthy
+  if (/(create|make|generate|build|plot|show)\s+(a\s+)?(chart|graph|visualization)/.test(t)) return "graph";
+  if (/(chart|graph|plot|visualization|visualise|visualize)\s+(of|for|showing)/.test(t)) return "graph";
+  // Code artifacts for explicit runnable code requests
+  if (/(create|write|generate)\s+(a\s+)?(runnable\s+)?(script|code\s+snippet|example)/.test(t)) return "code";
+  // Docs only for explicit document creation with intent indicators
+  if (/(create|write|draft|make|generate)\s+(a\s+)?(document|doc|brief|report)(\s+for|\s+about|\s+titled|\s+called)?/.test(t)) return "doc";
   return null;
 }
 
