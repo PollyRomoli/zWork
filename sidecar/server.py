@@ -9,6 +9,7 @@ import re
 import base64
 import binascii
 import mimetypes
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -865,7 +866,7 @@ async def chat_stream(req: StreamRequest):
     if req.attachments:
         lines = ["## Current interaction context"]
         lines.append(f"Artifact mode: {'on' if req.artifact_mode else 'off'}")
-        lines.append("Attachments uploaded into `~/.zwork/workspace/uploads`:")
+        lines.append(f"Attachments uploaded into `{home_mod.workspace_uploads_dir()}`:")
         for a in req.attachments:
             lines.append(f"- {a.name} → {a.path}")
         attachment_block = "\n".join(lines)
@@ -892,6 +893,7 @@ async def chat_stream(req: StreamRequest):
                     full_text += evt.get("text", "")
                 yield _sse(evt)
         except Exception as e:  # pragma: no cover
+            traceback.print_exc()
             yield _sse({"type": "error", "text": str(e)})
         if full_text:
             chatstore.append_message(chat.id, "assistant", full_text)

@@ -371,39 +371,60 @@ export async function streamChat(
   onEvent: (evt: StreamEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const resp = await fetch(u("/api/chat/stream"), {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    signal,
-  });
-  if (!resp.ok || !resp.body) {
-    const text = await resp.text().catch(() => "");
-    onEvent({ type: "error", text: `${resp.status}: ${text}` });
-    return;
-  }
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx: number;
-    // SSE frames are separated by blank lines
-    while ((idx = buf.indexOf("\n\n")) >= 0) {
-      const frame = buf.slice(0, idx);
-      buf = buf.slice(idx + 2);
-      for (const line of frame.split("\n")) {
-        if (!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (!data) continue;
-        try {
-          onEvent(JSON.parse(data) as StreamEvent);
-        } catch {
-          /* ignore */
-        }
+  const parseFrame = (frame: string) => {
+    for (const line of frame.split("\n")) {
+      if (!line.startsWith("data:")) continue;
+      const data = line.slice(5).trim();
+      if (!data) continue;
+      try {
+        onEvent(JSON.parse(data) as StreamEvent);
+      } catch {
+        /* ignore malformed partial event */
       }
     }
+  };
+
+  try {
+    const resp = await fetch(u("/api/chat/stream"), {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!resp.ok || !resp.body) {
+      const text = await resp.text().catch(() => "");
+      onEvent({ type: "error", text: `${resp.status}: ${text}` });
+      return;
+    }
+    const reader = resp.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buf += decoder.decode(value, { stream: true });
+      let idx: number;
+      // SSE frames are separated by blank lines
+      while ((idx = buf.indexOf("\n\n")) >= 0) {
+        const frame = buf.slice(0, idx);
+        buf = buf.slice(idx + 2);
+        parseFrame(frame);
+      }
+    }
+    if (buf.trim()) {
+      parseFrame(buf);
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") {
+      throw error;
+    }
+    const detail =
+      error instanceof Error && error.message
+        ? error.message
+        : String(error || "unknown error");
+    onEvent({
+      type: "error",
+      text: `Lost connection to the local backend. Partial progress may be shown above. ${detail}`,
+    });
   }
 }

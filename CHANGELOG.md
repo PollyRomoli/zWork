@@ -2,6 +2,14 @@
 
 All notable changes to zWork are documented here.
 
+## v0.3.4
+
+**Harden desktop state isolation and chat streaming.**
+
+- Isolated packaged desktop state from `~/.zwork` so installed builds no longer inherit local dev/session data
+- Turned dropped local chat streams into in-app backend errors instead of surfacing raw `TypeError: Load failed`
+- Kept onboarding on `LightRays` while restoring the logo particle backdrop on the empty home screen
+
 ## v0.3.3
 
 **Patch macOS backend resource path and onboarding visual.**

@@ -41,6 +41,10 @@ fn zwork_data_dir() -> PathBuf {
         .join("zWork")
 }
 
+fn zwork_sidecar_home() -> PathBuf {
+    zwork_data_dir().join("state")
+}
+
 fn append_log(msg: &str) {
     use std::io::Write;
 
@@ -48,7 +52,11 @@ fn append_log(msg: &str) {
     let _ = std::fs::create_dir_all(&base);
     base.push("backend.log");
 
-    if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open(base) {
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(base)
+    {
         let _ = writeln!(f, "[{}] {}", timestamp(), msg);
     }
 }
@@ -146,7 +154,9 @@ fn start_packaged_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
         }
     };
 
-    sidecar = sidecar.env("PYTHONUNBUFFERED", "1");
+    sidecar = sidecar
+        .env("PYTHONUNBUFFERED", "1")
+        .env("ZWORK_HOME", zwork_sidecar_home().display().to_string());
 
     match sidecar.spawn() {
         Ok((mut rx, child)) => {
@@ -155,10 +165,16 @@ fn start_packaged_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
                 while let Some(event) = rx.recv().await {
                     match event {
                         CommandEvent::Stdout(line) => {
-                            append_log(&format!("[backend stdout] {}", String::from_utf8_lossy(&line)));
+                            append_log(&format!(
+                                "[backend stdout] {}",
+                                String::from_utf8_lossy(&line)
+                            ));
                         }
                         CommandEvent::Stderr(line) => {
-                            append_log(&format!("[backend stderr] {}", String::from_utf8_lossy(&line)));
+                            append_log(&format!(
+                                "[backend stderr] {}",
+                                String::from_utf8_lossy(&line)
+                            ));
                         }
                         _ => {}
                     }
@@ -176,6 +192,7 @@ fn start_packaged_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
 fn start_dev_backend() -> Option<BackendChild> {
     let root = find_dev_repo_root()?;
     let python_exe = python_executable(&root);
+    let sidecar_home = zwork_sidecar_home();
 
     let log = std::fs::OpenOptions::new()
         .create(true)
@@ -192,7 +209,8 @@ fn start_dev_backend() -> Option<BackendChild> {
     cmd.current_dir(&root)
         .arg("-m")
         .arg("sidecar.server")
-        .env("PYTHONUNBUFFERED", "1");
+        .env("PYTHONUNBUFFERED", "1")
+        .env("ZWORK_HOME", sidecar_home.as_os_str());
 
     if let Some(f) = log {
         if let Ok(f2) = f.try_clone() {
@@ -204,9 +222,10 @@ fn start_dev_backend() -> Option<BackendChild> {
     }
 
     append_log(&format!(
-        "Spawning dev backend: python={} root={}",
+        "Spawning dev backend: python={} root={} zwork_home={}",
         python_exe.display(),
-        root.display()
+        root.display(),
+        sidecar_home.display(),
     ));
 
     match cmd.spawn() {
