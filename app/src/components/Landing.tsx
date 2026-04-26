@@ -93,7 +93,7 @@ export function Landing({
 
       <div
         className={cn(
-          "pointer-events-none absolute inset-0 transition-opacity duration-300 ease-out",
+          "pointer-events-none fixed inset-0 transition-opacity duration-300 ease-out",
           particlesExiting && "opacity-0",
         )}
         aria-hidden="true"
