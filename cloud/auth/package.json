@@ -1,0 +1,16 @@
+{
+  "name": "zwork-better-auth",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "bunx @better-auth/cli migrate && bun run index.ts"
+  },
+  "dependencies": {
+    "better-auth": "^1.1.1",
+    "pg": "^8.11.3",
+    "hono": "^4.1.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  }
+}
