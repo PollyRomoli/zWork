@@ -76,7 +76,7 @@ async fn ai_proxy(
     
     let client = reqwest::Client::new();
     
-    let path = req.uri().path().replace("/api/chat/stream", "/v1/messages");
+    let path = req.uri().path().replace("/api/chat/stream", "/v1/messages").replace("/api/v1/messages", "/v1/messages");
     let url = format!("https://api.anthropic.com{}", path);
     
     let mut builder = client.post(&url)
@@ -129,6 +129,7 @@ async fn main() {
         .route("/health", get(health_check))
         .route("/api/telemetry/event", post(ingest_telemetry))
         .route("/api/chat/stream", post(ai_proxy))
+        .route("/api/v1/messages", post(ai_proxy))
         .route("/api/webhooks/stripe", post(stripe_webhook))
         .with_state(state);
 
