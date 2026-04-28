@@ -152,3 +152,15 @@ export function trackOnboardingStep(step: string, completed: boolean) {
 export function trackTokenConsumption(model: string, inputTokens: number, outputTokens: number) {
   void post("token_consumption", { model, input_tokens: inputTokens, output_tokens: outputTokens, total_tokens: inputTokens + outputTokens });
 }
+
+export function trackError(errorType: string, message: string, component?: string) {
+  void post("error_encountered", { type: errorType, message, component });
+}
+
+export function trackNavigation(fromPath: string, toPath: string) {
+  void post("page_navigated", { from: fromPath, to: toPath });
+}
+
+export function trackArtifactCreated(kind: string, sizeBytes?: number) {
+  void post("artifact_created", { kind, size_bytes: sizeBytes });
+}
