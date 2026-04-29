@@ -2,6 +2,20 @@
 
 All notable changes to zWork are documented here.
 
+## v0.4.0 — Cloud Auth & User Tracking
+
+**Authentication, cloud proxy, and user management.**
+
+- Added Google OAuth 2.0 login flow with desktop popup window
+- Added initial login screen (`LoginScreen`) shown before main UI when unauthenticated
+- Added account section in Settings with user profile and sign-out
+- Added user session persistence via localStorage
+- Restored Better Auth (v1.6.9) cloud service with PostgreSQL kysely adapter
+- Added PostgreSQL `users` table for tracking Google OAuth users, subscription tiers, and billing status
+- Added Axum API endpoints: `GET /api/users/:google_id`, `POST /api/users`, `PUT /api/users/:google_id/tier`
+- Added `oauth-callback.html` for handling desktop OAuth redirects
+- Fixed Caddy routing for auth endpoints at `api.tryzwork.app/api/auth/*`
+
 ## v0.3.11
 
 - Restored macOS drag regions while removing the duplicate drag strip from Windows layouts.

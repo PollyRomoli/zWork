@@ -42,9 +42,9 @@ Building zWork Cloud (Pro) — zero-config AI endpoints, cross-device sync, and 
 
 | Component | Stack | Status |
 |-----------|-------|--------|
-| API Proxy | Rust (Axum), Postgres | Scaffolding |
-| Auth | Better Auth (Node/Bun) | Scaffolding |
-| Infrastructure | Caddy reverse proxy, Docker Compose | Scaffolding |
+| API Proxy | Rust (Axum), Postgres | Deployed |
+| Auth | Better Auth (Node/Bun) | Deployed |
+| Infrastructure | Caddy reverse proxy, Docker Compose | Deployed |
 | Billing | Stripe integration | Planned |
 | Analytics | PostHog | Planned |
 
