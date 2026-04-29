@@ -304,7 +304,7 @@ export const useApp = create<AppState>((set, get) => ({
   signInWithGoogle: async () => {
     set({ isLoadingAuth: true });
     try {
-      const clientId = "499797585133-o6rsh3vddbsh5sjjb5d74f1q15tl1ovp.apps.googleusercontent.com";
+      const clientId = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
       const redirectUri = `${window.location.origin}/oauth-callback.html`;
       const scope = "openid profile email";
       

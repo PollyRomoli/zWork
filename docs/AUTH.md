@@ -20,7 +20,7 @@ zWork uses a hybrid authentication model:
 
 ### Desktop OAuth Configuration
 
-- Client ID: `499797585133-o6rsh3vddbsh5sjjb5d74f1q15tl1ovp.apps.googleusercontent.com`
+- Client ID: `YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com`
 - Redirect URI: `http://localhost:1420/oauth-callback.html` (desktop) / `https://tryzwork.app/oauth-callback.html` (web)
 - Scope: `openid email profile`
 
