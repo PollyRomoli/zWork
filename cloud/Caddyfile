@@ -1,8 +1,33 @@
-:80 {
-    route /api/auth/* {
+# 1. Main API Subdomain
+api.tryzwork.app {
+    # Auth endpoints (Better Auth) — must come before /api/* catch-all
+    handle /api/auth/* {
         reverse_proxy better_auth:3000
     }
-    route /api/* {
+
+    # Health check at root
+    handle /health {
         reverse_proxy axum_api:8080
     }
+
+    # Root path also shows health
+    handle / {
+        reverse_proxy axum_api:8080
+    }
+
+    # Axum API & AI Proxy
+    handle /api/* {
+        reverse_proxy axum_api:8080
+    }
+}
+
+# 2. Database Management (Private)
+db.tryzwork.app {
+    # TODO: Add basicauth or IP allowlist before exposing publicly
+    reverse_proxy pgadmin:80
+}
+
+# 3. Analytics Shortcut
+analytics.tryzwork.app {
+    redir https://us.posthog.com/project/397748?
 }

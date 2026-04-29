@@ -16,7 +16,22 @@ services:
       - axum_api
       - better_auth
 
-  # 2. Rust (Axum) API Proxy
+  # 2. Auth Service (Better Auth)
+  better_auth:
+    build:
+      context: ./auth
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://zwork:zwork_password@postgres:5432/zwork_db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=https://api.tryzwork.app
+    depends_on:
+      - postgres
+
+  # 3. Rust (Axum) API Proxy
   axum_api:
     build: 
       context: ./api
@@ -32,20 +47,7 @@ services:
     depends_on:
       - postgres
 
-  # 3. Better Auth Service (Node/Bun)
-  better_auth:
-    build:
-      context: ./auth
-      dockerfile: Dockerfile
-    restart: unless-stopped
-    environment:
-      - DATABASE_URL=postgres://zwork:zwork_password@postgres:5432/zwork_db
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=https://auth.yourdomain.com
-    depends_on:
-      - postgres
-
-  # 4. PostgreSQL Database
+  # 3. PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -55,6 +57,16 @@ services:
       - POSTGRES_DB=zwork_db
     volumes:
       - pg_data:/var/lib/postgresql/data
+
+  # 4. DB Management (pgAdmin)
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@tryzwork.app
+      - PGADMIN_DEFAULT_PASSWORD=zwork_admin_pass
+    depends_on:
+      - postgres
 
 volumes:
   caddy_data:
