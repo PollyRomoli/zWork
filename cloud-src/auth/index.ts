@@ -41,6 +41,11 @@ export const auth = betterAuth({
 
 const app = new Hono();
 
+type DesktopGoogleQuery = {
+  callbackURL?: string;
+  errorCallbackURL?: string;
+};
+
 app.use("*", cors({
   origin: (origin) => {
     const allowed = TRUSTED_ORIGINS;
@@ -54,6 +59,28 @@ app.use("*", cors({
 
 app.on(["POST", "GET", "PUT", "DELETE", "PATCH", "OPTIONS"], "/api/auth/**", (c) => {
   return auth.handler(c.req.raw);
+});
+
+app.get("/api/auth/desktop/google", async (c) => {
+  const query = c.req.query() as DesktopGoogleQuery;
+  const callbackURL = query.callbackURL;
+  const errorCallbackURL = query.errorCallbackURL || callbackURL;
+
+  if (!callbackURL) {
+    return c.text("Missing callbackURL", 400);
+  }
+
+  const response = await auth.api.signInSocial({
+    body: {
+      provider: "google",
+      callbackURL,
+      errorCallbackURL,
+    },
+    headers: c.req.raw.headers,
+    asResponse: true,
+  });
+
+  return response;
 });
 
 app.get("/health", (c) => c.text("OK"));

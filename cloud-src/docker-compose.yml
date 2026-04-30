@@ -37,15 +37,18 @@ services:
     restart: unless-stopped
     environment:
       - DATABASE_URL=postgres://zwork:zwork_password@postgres:5432/zwork_db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
       - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
       - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
       - POSTHOG_API_KEY=${POSTHOG_API_KEY}
-      - POSTHOG_HOST=https://app.posthog.com
+      - POSTHOG_HOST=${POSTHOG_HOST}
       - OLLAMA_API_KEY=${OLLAMA_API_KEY}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-https://api.ollama.com/v1}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-minimax-m2.7:cloud}
       - AUTH_SESSION_URL=http://better_auth:3000/api/auth/get-session
       - ZWORK_GATEWAY_TOKEN=${ZWORK_GATEWAY_TOKEN}
+      - DEV_COUPON_CODES=${DEV_COUPON_CODES}
     depends_on:
       - postgres
       - better_auth

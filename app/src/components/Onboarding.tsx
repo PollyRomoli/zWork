@@ -4,6 +4,7 @@ import { ArrowRight, ArrowLeft, Check, ChevronDown, ExternalLink, Sparkles } fro
 import { Logo } from "./Logo";
 import { cn } from "../lib/cn";
 import { useApp } from "../lib/store";
+import { recordTelemetry } from "../lib/telemetry";
 import { useResolvedTheme } from "../lib/theme";
 import { isMacOS } from "../lib/platform";
 import { api, type OnboardingAnswer, type OnboardingCredential } from "../lib/api";
@@ -181,7 +182,7 @@ const QUESTIONS: Question[] = [
  * ------------------------------------------------------------------ */
 
 interface CredentialPreset {
-  id: "claude_code" | "ollama" | "openai" | "anthropic";
+  id: "zwork_managed" | "claude_code" | "ollama" | "openai" | "anthropic";
   label: string;
   subtitle: string;
   shape: "anthropic" | "openai";
@@ -189,12 +190,25 @@ interface CredentialPreset {
   defaultBaseUrl: string;
   defaultModelId: string;
   keyless?: boolean;
+  managed?: boolean;
   helpUrl?: string;
   recommended?: boolean;
   isOllama?: boolean;
 }
 
 const PRESETS: CredentialPreset[] = [
+  {
+    id: "zwork_managed",
+    label: "zWork Managed",
+    subtitle: "Use the hosted zWork gateway with your signed-in account",
+    shape: "openai",
+    credential: "openai",
+    defaultBaseUrl: "https://api.tryzwork.app/api/v1",
+    defaultModelId: "minimax-m2.7:cloud",
+    keyless: true,
+    managed: true,
+    recommended: true,
+  },
   {
     id: "ollama",
     label: "Ollama",
@@ -252,6 +266,14 @@ export interface ModelChoice {
 }
 
 export const MODEL_CATALOG: Record<CredentialPreset["id"], ModelChoice[]> = {
+  zwork_managed: [
+    {
+      id: PREV1_OLLAMA_MODEL_ID,
+      label: "MiniMax M2.7",
+      description: "Hosted through the zWork gateway with your signed-in account.",
+      cost: "Managed by zWork",
+    },
+  ],
   ollama: [
     {
       id: PREV1_OLLAMA_MODEL_ID,
@@ -372,6 +394,10 @@ export function Onboarding() {
         telemetry_enabled: true,
       });
       await Promise.all([refreshProviders(), refreshSettings(), refreshMe()]);
+      recordTelemetry("onboarding_completed", {
+        credential: credential?.credential || "",
+        model_id: credential?.model_id || "",
+      });
       setDone(true);
       // Small delay so the "Setting things up…" message has breathing room.
       setTimeout(() => setOnboardingDone(true), 900);
@@ -829,8 +855,12 @@ function ApiKeyStep({
   onChange: (c: OnboardingCredential | null) => void;
   onHelp: (which: "ollama") => void;
 }) {
-  const recommended = PRESETS.find((p) => p.recommended) || PRESETS[0];
-  const others = PRESETS.filter((p) => !p.recommended);
+  const user = useApp((s) => s.user);
+  const hasCloudToken = typeof window !== "undefined" && !!window.localStorage.getItem("zwork:cloud-token");
+  const cloudUnlocked = hasCloudToken && user?.tier === "pro";
+  const visiblePresets = PRESETS.filter((preset) => !preset.managed || hasCloudToken);
+  const recommended = visiblePresets.find((p) => p.recommended) || visiblePresets[0];
+  const others = visiblePresets.filter((p) => !p.recommended);
 
   const [preset, setPreset] = useState<CredentialPreset | null>(() =>
     initial
@@ -864,9 +894,12 @@ function ApiKeyStep({
       onChange(null);
       return;
     }
+    const effectiveApiKey = next.preset.managed
+      ? (window.localStorage.getItem("zwork:cloud-token") || "").trim()
+      : next.apiKey.trim();
     const valid =
       next.preset.keyless ||
-      (next.apiKey.trim().length > 0 && next.modelId.trim().length > 0);
+      (effectiveApiKey.length > 0 && next.modelId.trim().length > 0);
     if (!valid) {
       onChange(null);
       return;
@@ -874,7 +907,7 @@ function ApiKeyStep({
     onChange({
       shape: next.preset.shape,
       credential: next.preset.credential,
-      api_key: next.apiKey.trim(),
+      api_key: effectiveApiKey,
       base_url: next.baseUrl.trim() || next.preset.defaultBaseUrl,
       model_id: next.modelId.trim() || next.preset.defaultModelId,
       model_name:
@@ -885,6 +918,11 @@ function ApiKeyStep({
   };
 
   const pickPreset = (p: CredentialPreset) => {
+    if (p.managed && !cloudUnlocked) {
+      setPreset(p);
+      onChange(null);
+      return;
+    }
     setPreset(p);
     setBaseUrl(p.defaultBaseUrl);
     // Default to the first catalog entry for this provider when available,
@@ -907,21 +945,34 @@ function ApiKeyStep({
         <button
           key={p.id}
           type="button"
+          disabled={!!p.managed && !cloudUnlocked}
           onClick={() => pickPreset(p)}
           className={cn(
             "press relative flex w-full items-center justify-between rounded-xl border px-4 py-3.5 text-left transition-colors",
             active
               ? "border-emerald-500/70 bg-emerald-50 text-ink ring-1 ring-inset ring-emerald-500/40 dark:bg-emerald-500/10 dark:border-emerald-400/40 dark:ring-emerald-400/40"
               : "border-emerald-200 bg-emerald-50/60 text-ink hover:border-emerald-400 dark:border-emerald-500/30 dark:bg-emerald-500/5",
+            p.managed && !cloudUnlocked && "cursor-not-allowed opacity-65",
           )}
         >
           <div className="flex flex-col items-start">
             <div className="flex items-center gap-2">
               <Sparkles className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-300" />
               <span className="text-[14px] font-semibold">{p.label}</span>
-              <span className="rounded-full border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-200">
-                Recommended
-              </span>
+              {p.managed ? (
+                <span className={cn(
+                  "rounded-full px-1.5 py-0.5 text-[10px] font-medium",
+                  cloudUnlocked
+                    ? "border border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-200"
+                    : "border border-amber-200 bg-amber-100 text-amber-700",
+                )}>
+                  {cloudUnlocked ? "Managed" : "Unlock pro first"}
+                </span>
+              ) : (
+                <span className="rounded-full border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-200">
+                  Recommended
+                </span>
+              )}
             </div>
             <span className="mt-0.5 text-[11.5px] text-ink-muted">{p.subtitle}</span>
           </div>
@@ -992,7 +1043,13 @@ function ApiKeyStep({
         </AnimatePresence>
       </div>
 
-      {preset && !preset.keyless && (
+      {preset?.managed && !cloudUnlocked && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[12.5px] text-amber-800">
+          Your account is signed in, but managed hosting is locked until you unlock Pro. Use the Analytics tab to redeem the dev coupon, then come back here or activate it there directly.
+        </p>
+      )}
+
+      {preset && !preset.keyless && !preset.managed && (
         <motion.div
           initial={{ opacity: 0, y: -4 }}
           animate={{ opacity: 1, y: 0 }}
@@ -1058,11 +1115,17 @@ function ApiKeyStep({
 
       {preset?.keyless && (
         <p className="rounded-lg border border-line bg-paper-raised px-3 py-2 text-[12.5px] text-ink-muted">
-          ✓ zWork will detect your local credentials from{" "}
-          <code className="rounded bg-paper-sunken px-1 py-0.5 text-[11.5px]">
-            ~/.claude/
-          </code>
-          .
+          {preset.managed ? (
+            <>✓ zWork will use your signed-in desktop session and route requests through the hosted zWork gateway.</>
+          ) : (
+            <>
+              ✓ zWork will detect your local credentials from{" "}
+              <code className="rounded bg-paper-sunken px-1 py-0.5 text-[11.5px]">
+                ~/.claude/
+              </code>
+              .
+            </>
+          )}
         </p>
       )}
     </div>

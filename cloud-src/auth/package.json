@@ -7,7 +7,8 @@
     "db:migrate": "bunx @better-auth/cli@latest migrate"
   },
   "dependencies": {
-    "better-auth": "^1.6.9",
+    "@better-auth/cli": "1.4.22",
+    "better-auth": "1.4.22",
     "kysely": "^0.28.14",
     "pg": "^8.14.0",
     "hono": "^4.7.0"

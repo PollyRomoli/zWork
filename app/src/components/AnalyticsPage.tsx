@@ -5,12 +5,13 @@ import {
   clearManagedBackup,
   fetchAnalyticsSummary,
   logoutCloudSession,
-  redeemDevCoupon,
+  redeemAccessCode,
   saveManagedBackup,
   type AnalyticsSummary,
   type CloudUser,
   getManagedBackup,
 } from "../lib/cloud";
+import { recordTelemetry } from "../lib/telemetry";
 import { useApp } from "../lib/store";
 
 const MANAGED_MODEL_ID = "zwork-managed-proxy";
@@ -54,9 +55,9 @@ export function AnalyticsPage({
   const upsertCustomModel = useApp((s) => s.upsertCustomModel);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [couponCode, setCouponCode] = useState("zwork-dev-pro");
-  const [couponBusy, setCouponBusy] = useState(false);
-  const [couponError, setCouponError] = useState<string | null>(null);
+  const [accessCode, setAccessCode] = useState("zwork-dev-pro");
+  const [accessCodeBusy, setAccessCodeBusy] = useState(false);
+  const [accessCodeError, setAccessCodeError] = useState<string | null>(null);
   const [routeBusy, setRouteBusy] = useState(false);
   const [routeError, setRouteError] = useState<string | null>(null);
   const [logoutBusy, setLogoutBusy] = useState(false);
@@ -87,6 +88,8 @@ export function AnalyticsPage({
     const currentDefault = settings?.default_model || "";
     return currentBase === MANAGED_BASE_URL && currentDefault === MANAGED_MODEL_ID;
   }, [settings]);
+  const managedReady = summary?.managed_gateway_ready ?? false;
+  const managedStatus = summary?.managed_gateway_status || "Checking hosted gateway status…";
 
   const activateManagedMode = async () => {
     if (!settings) return;
@@ -114,6 +117,9 @@ export function AnalyticsPage({
       });
       await api.putSettings({ default_model: MANAGED_MODEL_ID });
       await Promise.all([refreshSettings(), refreshProviders()]);
+      recordTelemetry("managed_mode_activated", {
+        tier: cloudUser.tier,
+      });
     } catch (error) {
       setRouteError(error instanceof Error ? error.message : "Failed to activate managed mode.");
     } finally {
@@ -133,6 +139,7 @@ export function AnalyticsPage({
       await api.putSettings({ default_model: backup?.defaultModel || "" });
       clearManagedBackup();
       await Promise.all([refreshSettings(), refreshProviders()]);
+      recordTelemetry("managed_mode_restored_personal", {});
     } catch (error) {
       setRouteError(error instanceof Error ? error.message : "Failed to restore your previous setup.");
     } finally {
@@ -140,17 +147,25 @@ export function AnalyticsPage({
     }
   };
 
-  const redeemCoupon = async () => {
-    setCouponBusy(true);
-    setCouponError(null);
+  const redeemAccess = async () => {
+    setAccessCodeBusy(true);
+    setAccessCodeError(null);
     try {
-      const user = await redeemDevCoupon(couponCode);
+      const user = await redeemAccessCode(accessCode);
       onCloudUserChange(user);
       setSummary((current) => (current ? { ...current, user } : current));
+      recordTelemetry("access_code_applied", {
+        code: accessCode,
+        tier: user.tier,
+      });
     } catch (error) {
-      setCouponError(error instanceof Error ? error.message : "Failed to redeem coupon.");
+      setAccessCodeError(error instanceof Error ? error.message : "Failed to redeem access code.");
+      recordTelemetry("access_code_failed", {
+        code: accessCode,
+        message: error instanceof Error ? error.message : "Failed to redeem access code.",
+      });
     } finally {
-      setCouponBusy(false);
+      setAccessCodeBusy(false);
     }
   };
 
@@ -178,7 +193,7 @@ export function AnalyticsPage({
                 {user.name.split(/\s+/)[0] || "zWork"} is signed in.
               </h1>
               <p className="mt-3 max-w-[60ch] text-[14px] leading-6 text-ink-muted">
-                Your hosted account, coupon status, request volume, and server access all land here. Root user actions are counted separately from internal tool and continuation turns so agentic runs do not get rate-limited into the floor.
+                Your hosted account, access status, request volume, and server access all land here. Root user actions are counted separately from internal tool and continuation turns so agentic runs do not get rate-limited into the floor.
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -201,7 +216,7 @@ export function AnalyticsPage({
           <StatCard label="Today" value={loading ? "…" : String(summary?.root_requests_today || 0)} hint="User-initiated root requests in the current day." icon={<Rocket className="h-4 w-4" />} />
           <StatCard label="Continuations" value={loading ? "…" : String(summary?.continuation_requests_today || 0)} hint="Tool and follow-up model turns today." icon={<Zap className="h-4 w-4" />} />
           <StatCard label="Active runs" value={loading ? "…" : String(summary?.active_runs || 0)} hint="Currently live root runs still in flight." icon={<Activity className="h-4 w-4" />} />
-          <StatCard label="Tier" value={user.tier === "pro" ? "Pro" : "Free"} hint={user.coupon_code ? `Coupon: ${user.coupon_code}` : "No coupon applied yet."} icon={<Shield className="h-4 w-4" />} />
+          <StatCard label="Tier" value={user.tier === "pro" ? "Pro" : "Free"} hint={user.access_code || user.coupon_code ? `Code: ${user.access_code || user.coupon_code}` : "No access code applied yet."} icon={<Shield className="h-4 w-4" />} />
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1.15fr_0.85fr]">
@@ -260,13 +275,22 @@ export function AnalyticsPage({
                 ) : (
                   <button
                     type="button"
-                    disabled={routeBusy || user.tier !== "pro"}
+                    disabled={routeBusy || user.tier !== "pro" || !managedReady}
                     onClick={() => void activateManagedMode()}
                     className="rounded-full bg-ink px-4 py-2 text-[12.5px] font-medium text-paper hover:bg-ink-soft disabled:opacity-50"
                   >
-                    {routeBusy ? "Activating…" : user.tier === "pro" ? "Activate managed mode" : "Unlock pro first"}
+                    {routeBusy
+                      ? "Activating…"
+                      : user.tier !== "pro"
+                        ? "Unlock pro first"
+                        : managedReady
+                          ? "Activate managed mode"
+                          : "Hosted gateway not ready"}
                   </button>
                 )}
+              </div>
+              <div className="mt-3 rounded-2xl border border-line bg-paper-sunken px-4 py-3 text-[12.5px] text-ink-muted">
+                {managedStatus}
               </div>
               {routeError && (
                 <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-[12.5px] text-rose-700">
@@ -277,29 +301,29 @@ export function AnalyticsPage({
 
             <div className="rounded-[28px] border border-line bg-paper-raised p-6">
               <div className="text-[11px] font-semibold uppercase tracking-[0.18em] text-ink-faint">Pro testing</div>
-              <h2 className="mt-3 text-[20px] font-semibold tracking-tight text-ink">Coupon unlock</h2>
+              <h2 className="mt-3 text-[20px] font-semibold tracking-tight text-ink">Access code</h2>
               <p className="mt-2 text-[13px] leading-6 text-ink-muted">
-                Use a dev coupon to test the paid path before Stripe is live.
+                Use a dev access code to test the paid path before Stripe is live.
               </p>
               <div className="mt-4 flex gap-2">
                 <input
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
+                  value={accessCode}
+                  onChange={(e) => setAccessCode(e.target.value)}
                   className="min-w-0 flex-1 rounded-full border border-line bg-paper px-4 py-2 text-[12.5px] text-ink focus:border-line-strong focus:outline-none"
                   placeholder="zwork-dev-pro"
                 />
                 <button
                   type="button"
-                  disabled={couponBusy}
-                  onClick={() => void redeemCoupon()}
+                  disabled={accessCodeBusy}
+                  onClick={() => void redeemAccess()}
                   className="rounded-full border border-line-strong bg-paper px-4 py-2 text-[12.5px] font-medium text-ink hover:bg-paper-sunken disabled:opacity-50"
                 >
-                  {couponBusy ? "Redeeming…" : "Redeem"}
+                  {accessCodeBusy ? "Applying…" : "Apply code"}
                 </button>
               </div>
-              {couponError && (
+              {accessCodeError && (
                 <div className="mt-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-[12.5px] text-rose-700">
-                  {couponError}
+                  {accessCodeError}
                 </div>
               )}
             </div>
@@ -308,9 +332,9 @@ export function AnalyticsPage({
 
         <section className="grid gap-4 md:grid-cols-3">
           {[
-            { label: "API", href: summary?.api_url || "https://api.tryzwork.app/health", note: "Health and managed gateway base." },
-            { label: "Analytics", href: summary?.analytics_url || "https://us.posthog.com/project/397748", note: "PostHog project for funnels and braggable stats." },
-            { label: "DB", href: summary?.db_url || "https://db.tryzwork.app/", note: "Private surface. Public access should remain blocked." },
+            { label: "API", href: summary?.api_url || "https://api.tryzwork.app/health", note: "Health check and the hosted gateway edge." },
+            { label: "Analytics", href: summary?.analytics_url || "https://us.posthog.com/project/397748", note: "PostHog project for funnels, auth, and usage stats." },
+            { label: "DB", href: summary?.db_url || "https://db.tryzwork.app/", note: "Private admin surface. Public access should stay blocked." },
           ].map((link) => (
             <a
               key={link.label}

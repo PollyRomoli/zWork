@@ -1,4 +1,5 @@
 import { api } from "./api";
+import { capturePostHogEvent, registerPostHogProperties, setPostHogTelemetryEnabled } from "./posthog";
 
 type TelemetryProps = Record<string, unknown>;
 
@@ -46,6 +47,11 @@ function clearTimers() {
 
 async function post(event: string, properties: TelemetryProps = {}) {
   if (!enabled || !sessionId) return;
+  capturePostHogEvent(event, {
+    session_id: sessionId,
+    ...properties,
+    ts: Date.now(),
+  });
   await api
     .telemetryEvent({
       event,
@@ -75,6 +81,7 @@ function flushActive(reason: string) {
 
 export function setTelemetryEnabled(next: boolean) {
   enabled = next;
+  setPostHogTelemetryEnabled(next);
   if (!enabled) {
     stopTelemetrySession("disabled");
   }
@@ -87,6 +94,11 @@ export function startTelemetrySession(context: TelemetryContext) {
   sessionStartedAt = Date.now();
   activeAccumulatedMs = 0;
   activeSegmentStartedAt = visible() ? sessionStartedAt : 0;
+  registerPostHogProperties({
+    app_version: context.appVersion,
+    os: context.os,
+    current_screen: context.screen,
+  });
 
   visibilityHandler = () => {
     if (!sessionId) return;

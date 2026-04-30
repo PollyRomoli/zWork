@@ -9,6 +9,7 @@ import { cn } from "./lib/cn";
 import { recordTelemetry, setTelemetryEnabled, startTelemetrySession, stopTelemetrySession } from "./lib/telemetry";
 import { fallbackAppVersion, resolveAppVersion } from "./lib/appVersion";
 import { fetchCloudSession, onCloudAuthChanged, startDesktopGoogleSignIn, type CloudUser } from "./lib/cloud";
+import { identifyPostHogUser, resetPostHogUser } from "./lib/posthog";
 
 const Onboarding = lazy(() => import("./components/Onboarding").then((m) => ({ default: m.Onboarding })));
 const loadChatView = () => import("./components/ChatView").then((m) => ({ default: m.ChatView }));
@@ -53,7 +54,7 @@ export default function App() {
             email: user.email,
             name: user.name,
             tier: user.tier,
-            coupon_code: user.coupon_code ?? null,
+            coupon_code: user.access_code ?? user.coupon_code ?? null,
           }
         : null,
     });
@@ -98,6 +99,14 @@ export default function App() {
       });
     });
   }, []);
+
+  useEffect(() => {
+    if (!cloudUser) {
+      resetPostHogUser();
+      return;
+    }
+    identifyPostHogUser(cloudUser);
+  }, [cloudUser]);
 
   useEffect(() => {
     const enabled = !!settings?.telemetry_enabled;
@@ -269,8 +278,15 @@ export default function App() {
       const user = await startDesktopGoogleSignIn();
       setCloudUser(user);
       syncStoreUser(user);
+      recordTelemetry("cloud_sign_in_succeeded", {
+        tier: user.tier,
+        coupon_code: user.access_code ?? user.coupon_code ?? null,
+      });
     } catch (error) {
       setCloudError(error instanceof Error ? error.message : "Sign-in failed.");
+      recordTelemetry("cloud_sign_in_failed", {
+        message: error instanceof Error ? error.message : "Sign-in failed.",
+      });
     } finally {
       setCloudBusy(false);
       setCloudLoading(false);

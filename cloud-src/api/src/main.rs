@@ -1,7 +1,7 @@
 use axum::{
     extract::{Json, Path, Query, Request, State},
     http::{header, HeaderMap, HeaderValue, StatusCode},
-    response::{Html, IntoResponse, Redirect, Response},
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post, put},
     Router,
 };
@@ -25,6 +25,8 @@ struct AppState {
     http_client: Client,
     auth_session_url: String,
     auth_public_base: String,
+    google_client_id: String,
+    google_client_secret: String,
     gateway: GatewayConfig,
 }
 
@@ -117,6 +119,35 @@ struct CouponRedeemRequest {
 #[derive(Deserialize)]
 struct DesktopAuthStartQuery {
     port: u16,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+#[derive(Deserialize, sqlx::FromRow)]
+struct DesktopOauthState {
+    state: String,
+    port: i32,
+    expires_at: DateTime<Utc>,
+}
+
+#[derive(Deserialize)]
+struct GoogleCallbackQuery {
+    code: Option<String>,
+    state: Option<String>,
+    error: Option<String>,
+    error_description: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct GoogleTokenResponse {
+    access_token: String,
+}
+
+#[derive(Deserialize)]
+struct GoogleUserInfo {
+    sub: String,
+    email: String,
+    name: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -153,6 +184,8 @@ struct AnalyticsSummary {
     root_requests_total: i64,
     continuation_requests_total: i64,
     past_week: Vec<AnalyticsDay>,
+    managed_gateway_ready: bool,
+    managed_gateway_status: String,
     api_url: String,
     analytics_url: String,
     db_url: String,
@@ -231,6 +264,19 @@ async fn bootstrap_schema(db: &PgPool) -> Result<(), sqlx::Error> {
             created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             last_used_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
             expires_at TIMESTAMPTZ NOT NULL
+        );
+        "#,
+    )
+    .execute(db)
+    .await?;
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS desktop_oauth_states (
+            state TEXT PRIMARY KEY,
+            port INT NOT NULL,
+            expires_at TIMESTAMPTZ NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
         );
         "#,
     )
@@ -606,8 +652,11 @@ fn cors_allowed_origins() -> Vec<HeaderValue> {
     let raw = std::env::var("CORS_ALLOWED_ORIGINS").unwrap_or_else(|_| {
         [
             "tauri://localhost",
+            "https://tauri.localhost",
             "http://tauri.localhost",
+            "https://localhost:1420",
             "http://localhost:1420",
+            "https://127.0.0.1:1420",
             "http://127.0.0.1:1420",
             "https://tryzwork.app",
             "https://www.tryzwork.app",
@@ -718,15 +767,18 @@ async fn redeem_coupon(
     State(state): State<AppState>,
     headers: HeaderMap,
     Json(body): Json<CouponRedeemRequest>,
-) -> Result<Json<AppUser>, StatusCode> {
-    let access = ensure_gateway_access(&state, &headers).await?;
+) -> Result<Json<AppUser>, (StatusCode, String)> {
+    let access = ensure_gateway_access(&state, &headers)
+        .await
+        .map_err(|status| (status, "access_denied".to_string()))?;
     let user = resolve_app_user(&state, access)
-        .await?
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .await
+        .map_err(|status| (status, "user_lookup_failed".to_string()))?
+        .ok_or((StatusCode::UNAUTHORIZED, "not_signed_in".to_string()))?;
     let code = body.code.trim();
 
     if code.is_empty() {
-        return Err(StatusCode::BAD_REQUEST);
+        return Err((StatusCode::BAD_REQUEST, "missing_access_code".to_string()));
     }
 
     let allowed = state
@@ -735,7 +787,7 @@ async fn redeem_coupon(
         .iter()
         .any(|candidate| candidate == code);
     if !allowed {
-        return Err(StatusCode::FORBIDDEN);
+        return Err((StatusCode::FORBIDDEN, "invalid_access_code".to_string()));
     }
 
     let user = sqlx::query_as::<_, AppUser>(
@@ -752,134 +804,161 @@ async fn redeem_coupon(
     .bind(code)
     .fetch_one(&state.db)
     .await
-    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "access_code_update_failed".to_string()))?;
 
     Ok(Json(user))
 }
 
 async fn desktop_auth_start(
-    State(state): State<AppState>,
     Query(query): Query<DesktopAuthStartQuery>,
-) -> Result<Html<String>, StatusCode> {
-    if query.port == 0 {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let callback_url = format!(
-        "https://api.tryzwork.app/api/desktop/auth/complete?port={}",
-        query.port
-    );
-    let sign_in_url = format!("{}/sign-in/social", state.auth_public_base.trim_end_matches('/'));
-    let html = format!(
-        r#"<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>zWork Sign In</title>
-    <style>
-      :root {{
-        color-scheme: light;
-        --paper: #f5efe4;
-        --ink: #151313;
-        --muted: #6a615b;
-        --line: rgba(21, 19, 19, 0.1);
-        --accent: #0f766e;
-      }}
-      body {{
-        margin: 0;
-        min-height: 100vh;
-        display: grid;
-        place-items: center;
-        background:
-          radial-gradient(circle at top, rgba(15,118,110,0.14), transparent 38%),
-          linear-gradient(180deg, #fbf6ec 0%, var(--paper) 100%);
-        color: var(--ink);
-        font-family: Georgia, "Iowan Old Style", "Palatino Linotype", serif;
-      }}
-      .card {{
-        width: min(92vw, 420px);
-        border: 1px solid var(--line);
-        background: rgba(255,255,255,0.78);
-        backdrop-filter: blur(16px);
-        border-radius: 24px;
-        padding: 28px;
-        box-shadow: 0 24px 80px rgba(21,19,19,0.12);
-      }}
-      .eyebrow {{
-        font-size: 11px;
-        letter-spacing: 0.18em;
-        text-transform: uppercase;
-        color: var(--muted);
-      }}
-      h1 {{
-        margin: 10px 0 8px;
-        font-size: 32px;
-        line-height: 1.05;
-      }}
-      p {{
-        margin: 0;
-        color: var(--muted);
-        font-size: 15px;
-        line-height: 1.5;
-      }}
-      .pulse {{
-        margin-top: 18px;
-        display: inline-flex;
-        align-items: center;
-        gap: 10px;
-        color: var(--accent);
-        font-size: 13px;
-      }}
-      .dot {{
-        width: 8px;
-        height: 8px;
-        border-radius: 999px;
-        background: var(--accent);
-        box-shadow: 0 0 0 0 rgba(15,118,110,0.5);
-        animation: pulse 1.6s infinite;
-      }}
-      @keyframes pulse {{
-        0% {{ box-shadow: 0 0 0 0 rgba(15,118,110,0.5); }}
-        70% {{ box-shadow: 0 0 0 18px rgba(15,118,110,0); }}
-        100% {{ box-shadow: 0 0 0 0 rgba(15,118,110,0); }}
-      }}
-    </style>
-  </head>
-  <body>
-    <form id="signin" action="{sign_in_url}" method="POST">
-      <input type="hidden" name="provider" value="google" />
-      <input type="hidden" name="callbackURL" value="{callback_url}" />
-      <input type="hidden" name="errorCallbackURL" value="{callback_url}" />
-    </form>
-    <div class="card">
-      <div class="eyebrow">zWork Managed</div>
-      <h1>Signing you in</h1>
-      <p>Google auth is opening in the background. When it completes, this page will hand control back to the desktop app.</p>
-      <div class="pulse"><span class="dot"></span><span>Redirecting now…</span></div>
-    </div>
-    <script>document.getElementById("signin").submit();</script>
-  </body>
-</html>"#
-    );
-
-    Ok(Html(html))
-}
-
-async fn desktop_auth_complete(
-    State(state): State<AppState>,
-    Query(query): Query<DesktopAuthStartQuery>,
-    headers: HeaderMap,
 ) -> Result<Redirect, StatusCode> {
     if query.port == 0 {
         return Err(StatusCode::BAD_REQUEST);
     }
 
-    let auth_user = session_user_from_cookie(&state, &headers)
+    let sign_in_url = format!(
+        "https://api.tryzwork.app/api/auth/desktop/google?port={}",
+        query.port,
+    );
+
+    Ok(Redirect::temporary(&sign_in_url))
+}
+
+fn localhost_auth_redirect(port: u16, key: &str, value: &str) -> Redirect {
+    let redirect = format!(
+        "http://127.0.0.1:{}/callback?{}={}",
+        port,
+        key,
+        urlencoding::encode(value)
+    );
+    Redirect::temporary(&redirect)
+}
+
+async fn desktop_google_auth_start(
+    State(state): State<AppState>,
+    Query(query): Query<DesktopAuthStartQuery>,
+) -> Result<Redirect, StatusCode> {
+    if query.port == 0 {
+        return Err(StatusCode::BAD_REQUEST);
+    }
+
+    if state.google_client_id.trim().is_empty() || state.google_client_secret.trim().is_empty() {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    let state_value = format!("oauth_{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    let expires_at = Utc::now() + Duration::minutes(10);
+
+    sqlx::query(
+        r#"
+        INSERT INTO desktop_oauth_states (state, port, expires_at)
+        VALUES ($1, $2, $3)
+        "#,
+    )
+    .bind(&state_value)
+    .bind(i32::from(query.port))
+    .bind(expires_at)
+    .execute(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    let params = [
+        ("client_id", state.google_client_id.as_str()),
+        ("redirect_uri", "https://api.tryzwork.app/api/auth/callback/google"),
+        ("response_type", "code"),
+        ("scope", "openid email profile"),
+        ("access_type", "offline"),
+        ("prompt", "select_account"),
+        ("state", state_value.as_str()),
+    ];
+
+    let oauth_url = reqwest::Url::parse_with_params(
+        "https://accounts.google.com/o/oauth2/v2/auth",
+        params,
+    )
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    Ok(Redirect::temporary(oauth_url.as_ref()))
+}
+
+async fn desktop_google_callback(
+    State(state): State<AppState>,
+    Query(query): Query<GoogleCallbackQuery>,
+) -> Result<Redirect, StatusCode> {
+    let state_value = query.state.as_deref().ok_or(StatusCode::BAD_REQUEST)?;
+    let oauth_state = sqlx::query_as::<_, DesktopOauthState>(
+        r#"
+        DELETE FROM desktop_oauth_states
+        WHERE state = $1
+          AND expires_at > NOW()
+        RETURNING state, port, expires_at
+        "#,
+    )
+    .bind(state_value)
+    .fetch_optional(&state.db)
+    .await
+    .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+    .ok_or(StatusCode::UNAUTHORIZED)?;
+
+    let port = u16::try_from(oauth_state.port).map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+
+    if let Some(error) = query.error.as_deref() {
+        let detail = query
+            .error_description
+            .as_deref()
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or(error);
+        return Ok(localhost_auth_redirect(port, "error", detail));
+    }
+
+    let code = query.code.as_deref().ok_or(StatusCode::BAD_REQUEST)?;
+    let token_response = state
+        .http_client
+        .post("https://oauth2.googleapis.com/token")
+        .form(&[
+            ("code", code),
+            ("client_id", state.google_client_id.as_str()),
+            ("client_secret", state.google_client_secret.as_str()),
+            ("redirect_uri", "https://api.tryzwork.app/api/auth/callback/google"),
+            ("grant_type", "authorization_code"),
+        ])
+        .send()
         .await
-        .ok_or(StatusCode::UNAUTHORIZED)?;
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    if !token_response.status().is_success() {
+        return Ok(localhost_auth_redirect(port, "error", "google_token_exchange_failed"));
+    }
+
+    let token_payload = token_response
+        .json::<GoogleTokenResponse>()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    let userinfo_response = state
+        .http_client
+        .get("https://openidconnect.googleapis.com/v1/userinfo")
+        .bearer_auth(&token_payload.access_token)
+        .send()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    if !userinfo_response.status().is_success() {
+        return Ok(localhost_auth_redirect(port, "error", "google_userinfo_failed"));
+    }
+
+    let google_user = userinfo_response
+        .json::<GoogleUserInfo>()
+        .await
+        .map_err(|_| StatusCode::BAD_GATEWAY)?;
+
+    let auth_user = BetterAuthUser {
+        id: google_user.sub,
+        email: Some(google_user.email),
+        name: google_user.name,
+    };
     let app_user = upsert_app_user(&state, &auth_user).await?;
-    let code = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
+    let desktop_code = format!("{}{}", Uuid::new_v4().simple(), Uuid::new_v4().simple());
     let expires_at = Utc::now() + Duration::minutes(5);
 
     sqlx::query(
@@ -888,7 +967,7 @@ async fn desktop_auth_complete(
         VALUES ($1, $2, $3, $4, $5)
         "#,
     )
-    .bind(&code)
+    .bind(&desktop_code)
     .bind(&app_user.user_id)
     .bind(&app_user.email)
     .bind(&app_user.name)
@@ -897,8 +976,7 @@ async fn desktop_auth_complete(
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    let redirect = format!("http://127.0.0.1:{}/callback?code={}", query.port, code);
-    Ok(Redirect::temporary(&redirect))
+    Ok(localhost_auth_redirect(port, "code", &desktop_code))
 }
 
 async fn desktop_auth_exchange(
@@ -1077,6 +1155,19 @@ async fn analytics_summary(
         })
         .collect();
 
+    let managed_gateway_ready = !state.gateway.api_key.trim().is_empty()
+        && !state.gateway.base_url.trim().is_empty()
+        && !state.gateway.model.trim().is_empty();
+    let managed_gateway_status = if managed_gateway_ready {
+        "Hosted gateway is ready.".to_string()
+    } else if state.gateway.api_key.trim().is_empty() {
+        "Hosted gateway is not configured yet. Add OLLAMA_API_KEY on the server.".to_string()
+    } else if state.gateway.base_url.trim().is_empty() {
+        "Hosted gateway is missing an upstream base URL.".to_string()
+    } else {
+        "Hosted gateway is missing an upstream model identifier.".to_string()
+    };
+
     Ok(Json(AnalyticsSummary {
         user,
         root_requests_today,
@@ -1085,6 +1176,8 @@ async fn analytics_summary(
         root_requests_total,
         continuation_requests_total,
         past_week,
+        managed_gateway_ready,
+        managed_gateway_status,
         api_url: "https://api.tryzwork.app/health".to_string(),
         analytics_url: "https://us.posthog.com/project/397748".to_string(),
         db_url: "https://db.tryzwork.app/".to_string(),
@@ -1118,6 +1211,8 @@ async fn main() {
             .unwrap_or_else(|_| "http://better_auth:3000/api/auth/get-session".to_string()),
         auth_public_base: std::env::var("AUTH_PUBLIC_BASE")
             .unwrap_or_else(|_| "https://api.tryzwork.app/api/auth".to_string()),
+        google_client_id: std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default(),
+        google_client_secret: std::env::var("GOOGLE_CLIENT_SECRET").unwrap_or_default(),
         gateway: GatewayConfig {
             base_url: std::env::var("OLLAMA_BASE_URL")
                 .unwrap_or_else(|_| "https://api.ollama.com/v1".to_string()),
@@ -1158,7 +1253,8 @@ async fn main() {
         .route("/api/webhooks/stripe", post(stripe_webhook))
         .route("/api/dev/redeem-coupon", post(redeem_coupon))
         .route("/api/desktop/auth/start", get(desktop_auth_start))
-        .route("/api/desktop/auth/complete", get(desktop_auth_complete))
+        .route("/api/auth/desktop/google", get(desktop_google_auth_start))
+        .route("/api/auth/callback/google", get(desktop_google_callback))
         .route("/api/desktop/auth/exchange", post(desktop_auth_exchange))
         .route("/api/desktop/auth/logout", post(desktop_auth_logout))
         .route("/api/analytics/summary", get(analytics_summary))

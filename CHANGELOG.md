@@ -15,6 +15,17 @@ All notable changes to zWork are documented here.
 - Improved release documentation with troubleshooting section
 - Updated wiki index for better documentation discoverability
 
+## v0.3.18-beta.1
+
+**Beta release for real sign-in, analytics, access codes, and hosted-mode wiring.**
+
+- added PostHog to the desktop frontend and identify/reset around cloud sign-in so auth, onboarding, update, and access-code events land in one project
+- surfaced `zWork Managed` as a first-class onboarding option for signed-in users instead of burying the hosted route only in Analytics
+- renamed the dev unlock flow from "coupon" to "access code" in the desktop UX and improved server error messaging for bad or missing codes
+- added hosted-gateway readiness status to Analytics so the app can clearly show when the server still needs an upstream model key
+- kept the managed desktop route session-backed and local-agentic: the sidecar stays on-device while model traffic can be repointed to the hosted gateway
+- preserved the updater/version fixes from the alpha line so beta builds still report the bundled version and stay compatible with future update ordering
+
 ## v0.4.0 — Cloud Auth & User Tracking
 
 **Authentication, cloud proxy, and user management.**

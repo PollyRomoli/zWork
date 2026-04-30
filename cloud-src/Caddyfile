@@ -1,5 +1,13 @@
 # 1. Main API Subdomain
 api.tryzwork.app {
+    handle /api/auth/desktop/google* {
+        reverse_proxy axum_api:8080
+    }
+
+    handle /api/auth/callback/google* {
+        reverse_proxy axum_api:8080
+    }
+
     # Auth endpoints (Better Auth) — must come before /api/* catch-all
     handle /api/auth/* {
         reverse_proxy better_auth:3000
