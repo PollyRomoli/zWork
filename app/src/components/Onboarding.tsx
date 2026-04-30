@@ -172,7 +172,7 @@ const QUESTIONS: Question[] = [
     key: "credential",
     eyebrow: "Almost there",
     question: "Connect a model to start chatting.",
-    subtitle: "Bring your own key — zWork never proxies through our servers.",
+    subtitle: "Bring your own key for private local use, or switch to managed hosted routing after sign-in.",
   },
 ];
 

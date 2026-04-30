@@ -3324,7 +3324,7 @@ checksum = "0fda2ff0d084019ba4d7c6f371c95d8fd75ce3524c3cb8fb653a3023f6323e64"
 
 [[package]]
 name = "sidecar-app"
-version = "0.3.11"
+version = "0.3.18-alpha.1"
 dependencies = [
  "dirs",
  "serde",
@@ -3334,6 +3334,7 @@ dependencies = [
  "tauri-plugin-process",
  "tauri-plugin-shell",
  "tauri-plugin-updater",
+ "tokio",
 ]
 
 [[package]]

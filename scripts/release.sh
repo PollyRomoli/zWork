@@ -4,6 +4,8 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
+python3 "$ROOT_DIR/scripts/check-version-sync.py"
+
 TAG="${1:-v$(python3 - <<'PY'
 import json
 from pathlib import Path

@@ -28,23 +28,57 @@ function normalizeVersion(value: string): string {
   return value.replace(/^v/i, "").trim();
 }
 
-function parseVersion(value: string): number[] {
-  return normalizeVersion(value)
-    .split(".")
-    .map((part) => Number.parseInt(part.replace(/[^\d].*$/, ""), 10) || 0);
+interface SemverVersion {
+  core: number[];
+  prerelease: Array<number | string> | null;
 }
 
-function compareVersions(a: number[], b: number[]): number {
-  const n = Math.max(a.length, b.length);
+function parseVersion(value: string): SemverVersion {
+  const normalized = normalizeVersion(value);
+  const [coreRaw, prereleaseRaw] = normalized.split("-", 2);
+  const core = coreRaw.split(".").map((part) => Number.parseInt(part, 10) || 0);
+  const prerelease = prereleaseRaw
+    ? prereleaseRaw.split(".").map((part) => {
+        if (/^\d+$/.test(part)) return Number.parseInt(part, 10);
+        return part;
+      })
+    : null;
+  return { core, prerelease };
+}
+
+function compareIdentifier(a: number | string, b: number | string): number {
+  if (typeof a === "number" && typeof b === "number") return a - b;
+  if (typeof a === "number") return -1;
+  if (typeof b === "number") return 1;
+  return a.localeCompare(b);
+}
+
+function compareVersions(a: SemverVersion, b: SemverVersion): number {
+  const n = Math.max(a.core.length, b.core.length);
   for (let i = 0; i < n; i += 1) {
-    const av = a[i] ?? 0;
-    const bv = b[i] ?? 0;
+    const av = a.core[i] ?? 0;
+    const bv = b.core[i] ?? 0;
     if (av !== bv) return av - bv;
   }
+
+  if (!a.prerelease && !b.prerelease) return 0;
+  if (!a.prerelease) return 1;
+  if (!b.prerelease) return -1;
+
+  const m = Math.max(a.prerelease.length, b.prerelease.length);
+  for (let i = 0; i < m; i += 1) {
+    const av = a.prerelease[i];
+    const bv = b.prerelease[i];
+    if (av === undefined) return -1;
+    if (bv === undefined) return 1;
+    const diff = compareIdentifier(av, bv);
+    if (diff !== 0) return diff;
+  }
+
   return 0;
 }
 
-async function checkTauriUpdater(currentVersionParts: number[]): Promise<UpdateCardState | null> {
+async function checkTauriUpdater(currentVersionParts: SemverVersion): Promise<UpdateCardState | null> {
   try {
     const update = await check({ timeout: 15000 });
     if (!update) return null;
@@ -65,7 +99,7 @@ async function checkTauriUpdater(currentVersionParts: number[]): Promise<UpdateC
   }
 }
 
-async function checkGithubRelease(currentVersion: string, currentVersionParts: number[]): Promise<UpdateCardState | null> {
+async function checkGithubRelease(currentVersion: string, currentVersionParts: SemverVersion): Promise<UpdateCardState | null> {
   try {
     const response = await fetch(releaseRepo, {
       headers: { accept: "application/vnd.github+json" },

@@ -16,6 +16,19 @@ All notable changes to zWork are documented here.
 - Added `oauth-callback.html` for handling desktop OAuth redirects
 - Fixed Caddy routing for auth endpoints at `api.tryzwork.app/api/auth/*`
 
+## v0.3.18-alpha.1
+
+**Alpha release focused on auth, managed routing, analytics, and updater stability.**
+
+- added a required desktop account gate with Google sign-in through the live server
+- added desktop auth code exchange, bearer-backed managed sessions, coupon redemption, and analytics endpoints on the cloud API
+- added an Analytics tab with usage stats, managed-mode controls, coupon testing, and infra links
+- wired the desktop app to switch the local harness onto the managed hosted gateway while preserving local agent execution
+- fixed runtime version reporting so the app shows the bundled Tauri version instead of stale package metadata
+- tightened updater failure handling so native updater errors stay in-app instead of immediately punting users to GitHub
+- fixed version comparison for prerelease tags so alpha builds do not break future stable update ordering
+- removed invalid Tauri bundle config that was blocking desktop Rust builds altogether
+
 ## v0.3.11
 
 - Restored macOS drag regions while removing the duplicate drag strip from Windows layouts.

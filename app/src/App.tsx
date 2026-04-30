@@ -1,13 +1,14 @@
 import { Suspense, lazy, useEffect, useState } from "react";
 import { CheckCircle2, ExternalLink, X } from "lucide-react";
-import appPackage from "../package.json";
 import { Sidebar } from "./components/Sidebar";
 import { Landing } from "./components/Landing";
+import { CloudGate } from "./components/CloudGate";
 import { useApp } from "./lib/store";
 import { consumeInstalledUpdateNotice, detectUpdate, installUpdate, openReleaseUrl, type UpdateCardState, type UpdateProgress } from "./lib/update";
 import { cn } from "./lib/cn";
 import { recordTelemetry, setTelemetryEnabled, startTelemetrySession, stopTelemetrySession } from "./lib/telemetry";
-import { LoginScreen } from "./components/LoginScreen";
+import { fallbackAppVersion, resolveAppVersion } from "./lib/appVersion";
+import { fetchCloudSession, onCloudAuthChanged, startDesktopGoogleSignIn, type CloudUser } from "./lib/cloud";
 
 const Onboarding = lazy(() => import("./components/Onboarding").then((m) => ({ default: m.Onboarding })));
 const loadChatView = () => import("./components/ChatView").then((m) => ({ default: m.ChatView }));
@@ -16,13 +17,13 @@ const SettingsPage = lazy(() => import("./components/Settings").then((m) => ({ d
 const SearchModal = lazy(() => import("./components/SearchModal").then((m) => ({ default: m.SearchModal })));
 const ProjectView = lazy(() => import("./components/ProjectView").then((m) => ({ default: m.ProjectView })));
 const ArtifactPanel = lazy(() => import("./components/ArtifactPanel").then((m) => ({ default: m.ArtifactPanel })));
+const AnalyticsPage = lazy(() => import("./components/AnalyticsPage").then((m) => ({ default: m.AnalyticsPage })));
 
 export default function App() {
-  const appVersion = appPackage.version;
+  const [appVersion, setAppVersion] = useState(fallbackAppVersion());
   const bootstrap = useApp((s) => s.bootstrap);
   const view = useApp((s) => s.view);
   const settings = useApp((s) => s.settings);
-  const user = useApp((s) => s.user);
   const active = useApp((s) => s.activeChatId);
   const chat = useApp((s) => (active ? s.chats[active] : undefined));
   const artifactPanelOpen = !!(view === "chat" && active && chat?.artifactPanelOpen);
@@ -38,16 +39,63 @@ export default function App() {
     releaseUrl: string;
     notes?: string;
   } | null>(null);
+  const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
+  const [cloudLoading, setCloudLoading] = useState(true);
+  const [cloudBusy, setCloudBusy] = useState(false);
+  const [cloudError, setCloudError] = useState<string | null>(null);
   const showLanding = view === "chat" && active === null;
 
-  // Show login screen if user is not authenticated
-  if (!user) {
-    return <LoginScreen />;
-  }
+  const syncStoreUser = (user: CloudUser | null) => {
+    useApp.setState({
+      user: user
+        ? {
+            id: user.user_id,
+            email: user.email,
+            name: user.name,
+          }
+        : null,
+    });
+  };
 
   useEffect(() => {
     void bootstrap();
   }, [bootstrap]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveAppVersion().then((version) => {
+      if (!cancelled) setAppVersion(version);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchCloudSession()
+      .then((user) => {
+        if (!cancelled) {
+          setCloudUser(user);
+          syncStoreUser(user);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setCloudLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    return onCloudAuthChanged(() => {
+      void fetchCloudSession().then((user) => {
+        setCloudUser(user);
+        syncStoreUser(user);
+      });
+    });
+  }, []);
 
   useEffect(() => {
     const enabled = !!settings?.telemetry_enabled;
@@ -118,19 +166,21 @@ export default function App() {
     });
     setUpdateProgress({ phase: "checking" });
     try {
-      // Always try the Tauri updater first for seamless in-app updates
       const result = await installUpdate(updateCard, setUpdateProgress);
       if (!result.ok) {
-        // If updater fails, fall back to release page
         recordTelemetry("update_failed", {
           current_version: updateCard.currentVersion,
           latest_version: updateCard.latestVersion,
           source: updateCard.source,
           reason: "updater_error",
         });
-        setUpdateProgress({ phase: "opening" });
-        await openReleaseUrl(updateCard.releaseUrl);
-        setUpdateProgress({ phase: "idle" });
+        if (updateCard.source === "github") {
+          setUpdateProgress({ phase: "opening" });
+          await openReleaseUrl(updateCard.releaseUrl);
+          setUpdateProgress({ phase: "idle" });
+        } else {
+          setUpdateProgress({ phase: "error", message: result.message });
+        }
       } else if (result.ok) {
         recordTelemetry("update_finished", {
           current_version: updateCard.currentVersion,
@@ -210,6 +260,28 @@ export default function App() {
       return () => window.clearTimeout(t);
     }
   }, [showLanding, showLandingOverlay]);
+  const beginCloudSignIn = async () => {
+    setCloudBusy(true);
+    setCloudError(null);
+    try {
+      const user = await startDesktopGoogleSignIn();
+      setCloudUser(user);
+      syncStoreUser(user);
+    } catch (error) {
+      setCloudError(error instanceof Error ? error.message : "Sign-in failed.");
+    } finally {
+      setCloudBusy(false);
+      setCloudLoading(false);
+    }
+  };
+
+  if (cloudLoading) {
+    return <div className="h-screen w-screen bg-paper" />;
+  }
+  if (!cloudUser) {
+    return <CloudGate busy={cloudBusy} error={cloudError} onContinue={beginCloudSignIn} />;
+  }
+
   // Show onboarding when we know it's NOT done. `null` = still loading; render
   // nothing then to avoid flash.
   if (onboardingDone === false) {
@@ -228,66 +300,76 @@ export default function App() {
       <div className="flex min-h-0 flex-1 overflow-hidden">
         <Sidebar />
         <main className="relative flex min-w-0 flex-1 overflow-hidden">
-        {view === "settings" ? (
-          <Suspense fallback={panelFallback}>
-            <SettingsPage />
-          </Suspense>
-        ) : view === "projects" ? (
-          <Suspense fallback={panelFallback}>
-            <ProjectView />
-          </Suspense>
-        ) : (
-          <>
-            {!showLanding && (
-              <Suspense fallback={null}>
-                <ChatView />
-              </Suspense>
-            )}
-            {showLandingOverlay && (
-              <div
-                className={cn(
-                  "absolute inset-0 z-10 transition-opacity duration-300 ease-out",
-                  particlesExiting ? "opacity-0" : "opacity-100",
-                )}
-              >
-                <Landing
-                  particlesExiting={particlesExiting}
-                  updateCard={updateCard}
-                  updateProgress={updateProgress}
-                  onUpdate={updateCard ? runUpdate : undefined}
-                  onDismissUpdate={updateCard ? dismissUpdate : undefined}
-                />
-              </div>
-            )}
-          </>
-        )}
-        {recentUpdateNotice && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-6">
-            <div className="pointer-events-auto flex w-full max-w-[640px] items-center gap-3 rounded-2xl border border-line bg-paper-raised px-4 py-3 shadow-pop">
-              <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-600" />
-              <div className="min-w-0 flex-1 text-[12.5px] text-ink">
-                zWork {recentUpdateNotice.version} installed.{" "}
+          {view === "settings" ? (
+            <Suspense fallback={panelFallback}>
+              <SettingsPage />
+            </Suspense>
+          ) : view === "analytics" ? (
+            <Suspense fallback={panelFallback}>
+              <AnalyticsPage
+                cloudUser={cloudUser}
+                onCloudUserChange={(user) => {
+                  setCloudUser(user);
+                  syncStoreUser(user);
+                }}
+              />
+            </Suspense>
+          ) : view === "projects" ? (
+            <Suspense fallback={panelFallback}>
+              <ProjectView />
+            </Suspense>
+          ) : (
+            <>
+              {!showLanding && (
+                <Suspense fallback={null}>
+                  <ChatView />
+                </Suspense>
+              )}
+              {showLandingOverlay && (
+                <div
+                  className={cn(
+                    "absolute inset-0 z-10 transition-opacity duration-300 ease-out",
+                    particlesExiting ? "opacity-0" : "opacity-100",
+                  )}
+                >
+                  <Landing
+                    particlesExiting={particlesExiting}
+                    updateCard={updateCard}
+                    updateProgress={updateProgress}
+                    onUpdate={updateCard ? runUpdate : undefined}
+                    onDismissUpdate={updateCard ? dismissUpdate : undefined}
+                  />
+                </div>
+              )}
+            </>
+          )}
+          {recentUpdateNotice && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-5 z-20 flex justify-center px-6">
+              <div className="pointer-events-auto flex w-full max-w-[640px] items-center gap-3 rounded-2xl border border-line bg-paper-raised px-4 py-3 shadow-pop">
+                <CheckCircle2 className="h-4.5 w-4.5 shrink-0 text-emerald-600" />
+                <div className="min-w-0 flex-1 text-[12.5px] text-ink">
+                  zWork {recentUpdateNotice.version} installed.{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void openReleaseUrl(recentUpdateNotice.releaseUrl);
+                    }}
+                    className="inline-flex items-center gap-1 font-medium text-ink underline underline-offset-2"
+                  >
+                    View changelog <ExternalLink className="h-3.5 w-3.5" />
+                  </button>
+                </div>
                 <button
                   type="button"
-                  onClick={() => {
-                    void openReleaseUrl(recentUpdateNotice.releaseUrl);
-                  }}
-                  className="inline-flex items-center gap-1 font-medium text-ink underline underline-offset-2"
+                  onClick={() => setRecentUpdateNotice(null)}
+                  className="press rounded-full p-1 text-ink-faint hover:bg-paper-sunken hover:text-ink"
+                  aria-label="Dismiss update notice"
                 >
-                  View changelog <ExternalLink className="h-3.5 w-3.5" />
+                  <X className="h-4 w-4" />
                 </button>
               </div>
-              <button
-                type="button"
-                onClick={() => setRecentUpdateNotice(null)}
-                className="press rounded-full p-1 text-ink-faint hover:bg-paper-sunken hover:text-ink"
-                aria-label="Dismiss update notice"
-              >
-                <X className="h-4 w-4" />
-              </button>
             </div>
-          </div>
-        )}
+          )}
         </main>
         {artifactPanelOpen && (
           <Suspense fallback={null}>

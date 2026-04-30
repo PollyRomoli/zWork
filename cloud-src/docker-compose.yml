@@ -1,0 +1,77 @@
+services:
+  # 1. Reverse Proxy (Caddy)
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - axum_api
+      - better_auth
+
+  # 2. Auth Service (Better Auth)
+  better_auth:
+    build:
+      context: ./auth
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://zwork:zwork_password@postgres:5432/zwork_db
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET}
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=https://api.tryzwork.app
+    depends_on:
+      - postgres
+
+  # 3. Rust (Axum) API Proxy
+  axum_api:
+    build: 
+      context: ./api
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      - DATABASE_URL=postgres://zwork:zwork_password@postgres:5432/zwork_db
+      - STRIPE_SECRET_KEY=${STRIPE_SECRET_KEY}
+      - STRIPE_WEBHOOK_SECRET=${STRIPE_WEBHOOK_SECRET}
+      - POSTHOG_API_KEY=${POSTHOG_API_KEY}
+      - POSTHOG_HOST=https://app.posthog.com
+      - OLLAMA_API_KEY=${OLLAMA_API_KEY}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-https://api.ollama.com/v1}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-minimax-m2.7:cloud}
+      - AUTH_SESSION_URL=http://better_auth:3000/api/auth/get-session
+      - ZWORK_GATEWAY_TOKEN=${ZWORK_GATEWAY_TOKEN}
+    depends_on:
+      - postgres
+      - better_auth
+
+  # 3. PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=zwork
+      - POSTGRES_PASSWORD=zwork_password
+      - POSTGRES_DB=zwork_db
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  # 4. DB Management (pgAdmin)
+  pgadmin:
+    image: dpage/pgadmin4
+    restart: unless-stopped
+    environment:
+      - PGADMIN_DEFAULT_EMAIL=admin@tryzwork.app
+      - PGADMIN_DEFAULT_PASSWORD=zwork_admin_pass
+    depends_on:
+      - postgres
+
+volumes:
+  caddy_data:
+  caddy_config:
+  pg_data:

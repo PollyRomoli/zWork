@@ -1,6 +1,6 @@
 [package]
 name = "sidecar-app"
-version = "0.3.11"
+version = "0.3.18-alpha.1"
 description = "Sidecar desktop assistant"
 authors = ["Sidecar"]
 edition = "2021"
@@ -20,6 +20,7 @@ tauri-plugin-updater = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 dirs = "6"
+tokio = { version = "1", features = ["net", "time"] }
 
 [features]
 default = ["custom-protocol"]

@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::path::PathBuf;
+use std::time::Duration;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
 use tauri::{Manager, RunEvent};
@@ -263,6 +264,100 @@ fn open_external(app: tauri::AppHandle, url: String) -> Result<(), String> {
     app.shell().open(url, None).map_err(|err| err.to_string())
 }
 
+#[tauri::command]
+async fn begin_desktop_auth(app: tauri::AppHandle, start_url: String) -> Result<String, String> {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .map_err(|err| format!("failed to bind local auth callback: {err}"))?;
+    let port = listener
+        .local_addr()
+        .map_err(|err| format!("failed to resolve auth callback port: {err}"))?
+        .port();
+
+    let separator = if start_url.contains('?') { '&' } else { '?' };
+    let launch_url = format!("{start_url}{separator}port={port}");
+    app.shell()
+        .open(launch_url, None)
+        .map_err(|err| format!("failed to open browser: {err}"))?;
+
+    let accept = tokio::time::timeout(Duration::from_secs(240), listener.accept())
+        .await
+        .map_err(|_| "sign-in timed out".to_string())?
+        .map_err(|err| format!("failed to accept auth callback: {err}"))?;
+    let (socket, _) = accept;
+
+    let mut request = vec![0u8; 8192];
+    let size = tokio::time::timeout(Duration::from_secs(15), socket.readable())
+        .await
+        .map_err(|_| "auth callback stalled".to_string())
+        .and_then(|_| {
+            socket
+                .try_read(&mut request)
+                .map_err(|err| format!("failed to read auth callback: {err}"))
+        })?;
+
+    let raw = String::from_utf8_lossy(&request[..size]);
+    let path = raw
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .unwrap_or("/");
+
+    let query = path.split('?').nth(1).unwrap_or("");
+    let mut code: Option<String> = None;
+    let mut error_message: Option<String> = None;
+    for pair in query.split('&') {
+        let mut parts = pair.splitn(2, '=');
+        let key = parts.next().unwrap_or("");
+        let value = parts.next().unwrap_or("").replace('+', " ");
+        let decoded = percent_decode(&value);
+        match key {
+            "code" if !decoded.is_empty() => code = Some(decoded),
+            "error" if !decoded.is_empty() => error_message = Some(decoded),
+            _ => {}
+        }
+    }
+
+    let ok = code.is_some() && error_message.is_none();
+    let html = if ok {
+        "<!doctype html><html><body style=\"font-family:Georgia,serif;background:#f6efe5;color:#151313;display:grid;place-items:center;min-height:100vh;margin:0\"><div style=\"padding:24px 28px;border:1px solid rgba(21,19,19,.1);border-radius:20px;background:rgba(255,255,255,.86)\"><h1 style=\"margin:0 0 10px;font-size:28px\">Signed in</h1><p style=\"margin:0;color:#6a615b\">You can close this tab and return to zWork.</p></div></body></html>"
+    } else {
+        "<!doctype html><html><body style=\"font-family:Georgia,serif;background:#f6efe5;color:#151313;display:grid;place-items:center;min-height:100vh;margin:0\"><div style=\"padding:24px 28px;border:1px solid rgba(21,19,19,.1);border-radius:20px;background:rgba(255,255,255,.86)\"><h1 style=\"margin:0 0 10px;font-size:28px\">Sign-in failed</h1><p style=\"margin:0;color:#6a615b\">Return to zWork and try again.</p></div></body></html>"
+    };
+    let response = format!(
+        "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}",
+        html.len(),
+        html
+    );
+    let _ = tokio::time::timeout(Duration::from_secs(5), socket.writable()).await;
+    let _ = socket.try_write(response.as_bytes());
+
+    if let Some(message) = error_message {
+        return Err(message);
+    }
+
+    code.ok_or_else(|| "missing auth code".to_string())
+}
+
+fn percent_decode(input: &str) -> String {
+    let mut out = Vec::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hex = &input[i + 1..i + 3];
+            if let Ok(value) = u8::from_str_radix(hex, 16) {
+                out.push(value);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).to_string()
+}
+
 fn main() {
     configure_linux_webview_env();
 
@@ -270,7 +365,7 @@ fn main() {
         .plugin(tauri_plugin_shell::init())
         .plugin(process_init())
         .plugin(UpdaterBuilder::new().build())
-        .invoke_handler(tauri::generate_handler![open_external])
+        .invoke_handler(tauri::generate_handler![open_external, begin_desktop_auth])
         .manage(Backend(Mutex::new(None)))
         .build(tauri::generate_context!())
         .expect("error while building zWork");

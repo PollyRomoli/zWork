@@ -10,6 +10,7 @@ import {
   type MeResponse,
   type Project,
 } from "./api";
+import { fetchCloudSession, logoutCloudSession, startDesktopGoogleSignIn } from "./cloud";
 import { setTelemetryEnabled, trackError, trackArtifactCreated } from "./telemetry";
 
 export type Role = "user" | "assistant";
@@ -49,7 +50,7 @@ export interface Chat {
   activeArtifactId?: string | null;
 }
 
-export type View = "chat" | "settings" | "projects";
+export type View = "chat" | "settings" | "projects" | "analytics";
 
 export type ChatBucket = "Today" | "This week" | "Earlier";
 
@@ -304,79 +305,14 @@ export const useApp = create<AppState>((set, get) => ({
   signInWithGoogle: async () => {
     set({ isLoadingAuth: true });
     try {
-      const clientId = "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com";
-      const redirectUri = `${window.location.origin}/oauth-callback.html`;
-      const scope = "openid profile email";
-      
-      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
-        `client_id=${clientId}&` +
-        `redirect_uri=${encodeURIComponent(redirectUri)}&` +
-        `response_type=token&` +
-        `scope=${encodeURIComponent(scope)}`;
-      
-      const width = 500;
-      const height = 600;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      
-      const popup = window.open(
-        authUrl,
-        "Google Sign In",
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
-      
-      if (!popup) {
-        throw new Error("Popup blocked. Please allow popups for this app.");
-      }
-      
-      return new Promise((resolve, reject) => {
-        const messageListener = (event: MessageEvent) => {
-          if (event.origin !== window.location.origin) return;
-          
-          if (event.data?.type === "OAUTH_SUCCESS") {
-            const { access_token } = event.data;
-            
-            // Fetch user info with the access token
-            fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${access_token}`)
-              .then(res => res.json())
-              .then(userInfo => {
-                const user: User = {
-                  id: userInfo.sub,
-                  email: userInfo.email,
-                  name: userInfo.name,
-                  picture: userInfo.picture,
-                };
-                localStorage.setItem("zwork_user", JSON.stringify(user));
-                localStorage.setItem("zwork_token", access_token);
-                set({ user, isLoadingAuth: false });
-                window.removeEventListener("message", messageListener);
-                popup.close();
-                resolve();
-              })
-              .catch(err => {
-                set({ isLoadingAuth: false });
-                window.removeEventListener("message", messageListener);
-                popup.close();
-                reject(err);
-              });
-          } else if (event.data?.type === "OAUTH_ERROR") {
-            set({ isLoadingAuth: false });
-            window.removeEventListener("message", messageListener);
-            popup.close();
-            reject(new Error(event.data.error || "OAuth failed"));
-          }
-        };
-        
-        window.addEventListener("message", messageListener);
-        
-        const checkClosed = setInterval(() => {
-          if (popup.closed) {
-            set({ isLoadingAuth: false });
-            clearInterval(checkClosed);
-            window.removeEventListener("message", messageListener);
-            reject(new Error("OAuth window was closed"));
-          }
-        }, 1000);
+      const cloudUser = await startDesktopGoogleSignIn();
+      set({
+        user: {
+          id: cloudUser.user_id,
+          email: cloudUser.email,
+          name: cloudUser.name,
+        },
+        isLoadingAuth: false,
       });
     } catch (error) {
       set({ isLoadingAuth: false });
@@ -384,9 +320,9 @@ export const useApp = create<AppState>((set, get) => ({
     }
   },
   signOut: () => {
-    localStorage.removeItem("zwork_user");
-    localStorage.removeItem("zwork_token");
-    set({ user: null });
+    void logoutCloudSession().finally(() => {
+      set({ user: null });
+    });
   },
 
   providers: null,
@@ -514,15 +450,19 @@ export const useApp = create<AppState>((set, get) => ({
   },
 
   bootstrap: async () => {
-    // Load user from localStorage on startup
     try {
-      const savedUser = localStorage.getItem("zwork_user");
-      if (savedUser) {
-        const user = JSON.parse(savedUser) as User;
-        set({ user });
+      const cloudUser = await fetchCloudSession();
+      if (cloudUser) {
+        set({
+          user: {
+            id: cloudUser.user_id,
+            email: cloudUser.email,
+            name: cloudUser.name,
+          },
+        });
       }
     } catch { /* ignore */ }
-    
+
     await Promise.all([
       get().refreshProviders(),
       get().refreshSettings(),

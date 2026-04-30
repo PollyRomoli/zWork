@@ -115,6 +115,12 @@ Helper:
 ./scripts/release.sh
 ```
 
+The release helper now refuses to publish if these drift:
+
+- `app/package.json`
+- `app/src-tauri/tauri.conf.json`
+- `app/src-tauri/Cargo.toml`
+
 Suggested names:
 
 - `zWork-linux-x86_64.AppImage`

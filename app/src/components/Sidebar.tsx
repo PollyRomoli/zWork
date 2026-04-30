@@ -12,6 +12,7 @@ import {
   Trash2,
   MoreHorizontal,
   FolderOpen,
+  BarChart3,
 } from "lucide-react";
 import { cn } from "../lib/cn";
 import { isMacOS } from "../lib/platform";
@@ -237,6 +238,13 @@ export function Sidebar() {
 
       {/* Footer */}
       <div className="border-t border-line/80 p-3">
+        <SidebarButton
+          icon={<BarChart3 />}
+          label="Analytics"
+          collapsed={!open}
+          active={view === "analytics"}
+          onClick={() => setView("analytics")}
+        />
         <SidebarButton
           icon={<Settings />}
           label="Settings"

@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import appPackage from "../../package.json";
 import {
   ArrowLeft,
   Eye,
@@ -25,6 +24,7 @@ import {
 import { cn } from "../lib/cn";
 import { useApp } from "../lib/store";
 import { isMacOS } from "../lib/platform";
+import { fallbackAppVersion, resolveAppVersion } from "../lib/appVersion";
 import { IconButton } from "./IconButton";
 import type { Integration } from "../lib/api";
 
@@ -559,7 +559,7 @@ function GeneralPanel({
   settings: ReturnType<typeof useApp.getState>["settings"];
   onSave: (patch: { default_model?: string; use_claude_code_config?: boolean; telemetry_enabled?: boolean }) => Promise<void>;
 }) {
-  const appVersion = appPackage.version;
+  const [appVersion, setAppVersion] = useState(fallbackAppVersion());
   const providers = useApp((s) => s.providers);
   const models = providers?.models ?? [];
   const [defaultModel, setDefaultModel] = useState(settings?.default_model ?? "");
@@ -576,6 +576,16 @@ function GeneralPanel({
     setUseClaude(!!settings?.use_claude_code_config);
     setTelemetryEnabled(!!settings?.telemetry_enabled);
   }, [settings]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void resolveAppVersion().then((version) => {
+      if (!cancelled) setAppVersion(version);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const applyTheme = (v: "system" | "light" | "dark") => {
     setThemePref(v);
