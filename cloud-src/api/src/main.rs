@@ -1,6 +1,6 @@
 use axum::{
     extract::{Json, Path, Query, Request, State},
-    http::{header, HeaderMap, StatusCode},
+    http::{header, HeaderMap, HeaderValue, StatusCode},
     response::{Html, IntoResponse, Redirect, Response},
     routing::{get, post, put},
     Router,
@@ -14,8 +14,6 @@ use tokio::net::TcpListener;
 use tower_http::cors::{Any, CorsLayer};
 use tracing::{error, info};
 use uuid::Uuid;
-
-const TEST_OLLAMA_API_KEY: &str = "48dc3d9713554e81b1ff43c39187f491.mGuuk200M2L6VRM05MVzdvEc";
 
 #[derive(Clone)]
 struct AppState {
@@ -558,6 +556,9 @@ async fn ai_proxy(
     let gateway_base = state.gateway.base_url.trim_end_matches('/');
     let gateway_model = state.gateway.model.clone();
     let gateway_endpoint = format!("{gateway_base}/chat/completions");
+    if state.gateway.api_key.trim().is_empty() {
+        return Err(StatusCode::SERVICE_UNAVAILABLE);
+    }
     let body_bytes = axum::body::to_bytes(req.into_body(), 1024 * 1024 * 10)
         .await
         .map_err(|_| StatusCode::BAD_REQUEST)?;
@@ -599,6 +600,25 @@ async fn ai_proxy(
     }
 
     Ok(response)
+}
+
+fn cors_allowed_origins() -> Vec<HeaderValue> {
+    let raw = std::env::var("CORS_ALLOWED_ORIGINS").unwrap_or_else(|_| {
+        [
+            "tauri://localhost",
+            "http://tauri.localhost",
+            "http://localhost:1420",
+            "http://127.0.0.1:1420",
+            "https://tryzwork.app",
+            "https://www.tryzwork.app",
+            "https://api.tryzwork.app",
+        ]
+        .join(",")
+    });
+
+    raw.split(',')
+        .filter_map(|value| HeaderValue::from_str(value.trim()).ok())
+        .collect()
 }
 
 async fn stripe_webhook(State(state): State<AppState>) -> impl IntoResponse {
@@ -1102,7 +1122,8 @@ async fn main() {
             base_url: std::env::var("OLLAMA_BASE_URL")
                 .unwrap_or_else(|_| "https://api.ollama.com/v1".to_string()),
             api_key: std::env::var("OLLAMA_API_KEY")
-                .unwrap_or_else(|_| TEST_OLLAMA_API_KEY.to_string()),
+                .or_else(|_| std::env::var("ZWORK_TEST_OLLAMA_API_KEY"))
+                .unwrap_or_default(),
             model: std::env::var("OLLAMA_MODEL")
                 .unwrap_or_else(|_| "minimax-m2.7:cloud".to_string()),
             bearer_token: std::env::var("ZWORK_GATEWAY_TOKEN").unwrap_or_default(),
@@ -1124,7 +1145,7 @@ async fn main() {
     };
 
     let cors = CorsLayer::new()
-        .allow_origin(Any)
+        .allow_origin(cors_allowed_origins())
         .allow_methods(Any)
         .allow_headers(Any);
 
