@@ -170,6 +170,8 @@ export interface User {
   email: string;
   name: string;
   picture?: string;
+  tier?: "free" | "pro";
+  coupon_code?: string | null;
 }
 
 interface AppState {
@@ -311,6 +313,8 @@ export const useApp = create<AppState>((set, get) => ({
           id: cloudUser.user_id,
           email: cloudUser.email,
           name: cloudUser.name,
+          tier: cloudUser.tier,
+          coupon_code: cloudUser.coupon_code ?? null,
         },
         isLoadingAuth: false,
       });
@@ -458,6 +462,8 @@ export const useApp = create<AppState>((set, get) => ({
             id: cloudUser.user_id,
             email: cloudUser.email,
             name: cloudUser.name,
+            tier: cloudUser.tier,
+            coupon_code: cloudUser.coupon_code ?? null,
           },
         });
       }

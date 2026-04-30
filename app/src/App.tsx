@@ -52,6 +52,8 @@ export default function App() {
             id: user.user_id,
             email: user.email,
             name: user.name,
+            tier: user.tier,
+            coupon_code: user.coupon_code ?? null,
           }
         : null,
     });
