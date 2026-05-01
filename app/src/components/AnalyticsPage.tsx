@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Activity, ArrowRight, BarChart3, Calendar, CheckCircle, ExternalLink, LogOut, Sparkles, TrendingUp, User, Zap } from "lucide-react";
+import { Activity, BarChart3, Calendar, CheckCircle, ExternalLink, LogOut, Sparkles, TrendingUp, User, Zap } from "lucide-react";
 import { api } from "../lib/api";
 import {
   clearManagedBackup,
@@ -24,13 +24,11 @@ function StatCard({
   value,
   hint,
   icon,
-  trend,
 }: {
   label: string;
   value: string;
   hint: string;
   icon: ReactNode;
-  trend?: "up" | "down" | "neutral";
 }) {
   return (
     <div className="rounded-2xl border border-line bg-paper-raised p-5 shadow-[0_8px_32px_rgba(17,17,17,0.06)] transition-shadow hover:shadow-[0_12px_40px_rgba(17,17,17,0.1)]">

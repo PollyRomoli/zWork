@@ -220,7 +220,11 @@ jobs:
           ./zWork-linux-x86_64.AppImage
           \`\`\`
 
-          **macOS**: download \`zWork-macos-universal.dmg\`, open it, then drag zWork to Applications.
+          **macOS** (cURL - no GateKeeper prompt):
+          \`\`\`bash
+          curl -fsSL https://raw.githubusercontent.com/Ryz3nPlayZ/zWork/main/scripts/install-macos.sh | bash
+          \`\`\`
+          Or download \`zWork-macos-universal.dmg\`, open it, then drag zWork to Applications.
 
           **Windows**:
           \`\`\`powershell
