@@ -197,6 +197,7 @@ export function LogoParticles({
     let themeObs: MutationObserver | null = null;
     let resizeObs: ResizeObserver | null = null;
     let timer: THREE.Timer | null = null;
+    let onContextLost: ((e: Event) => void) | null = null;
     let bootTimer = 0;
     let raf = 0;
 
@@ -241,6 +242,14 @@ export function LogoParticles({
         renderer.domElement.style.width = "100%";
         renderer.domElement.style.height = "100%";
         renderer.domElement.style.display = "block";
+
+        onContextLost = (e: Event) => {
+          e.preventDefault();
+          if (!cancelled) setRenderFailed(true);
+          cancelled = true;
+        };
+        renderer.domElement.addEventListener("webglcontextlost", onContextLost);
+
         mount.appendChild(renderer.domElement);
 
         scene = new THREE.Scene();
@@ -408,6 +417,9 @@ export function LogoParticles({
       timer?.dispose();
       geometry?.dispose();
       material?.dispose();
+      if (renderer && onContextLost) {
+        renderer.domElement.removeEventListener("webglcontextlost", onContextLost);
+      }
       renderer?.dispose();
       if (renderer?.domElement?.parentElement === mount) {
         mount.removeChild(renderer.domElement);

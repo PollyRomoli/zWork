@@ -65,10 +65,17 @@ if [[ "$PLATFORM" == "linux" ]]; then
 
   ln -sf zWork.png "$APPDIR/sidecar-app.png"
 
-  # Remove bundled WebKitGTK auxiliary processes — they're compiled against
-  # the CI environment's libraries and crash on user machines. The system's
-  # own WebKitGTK (libwebkit2gtk-4.1) must be used instead.
-  rm -rf "$APPDIR/usr/lib/webkit2gtk-4.1" "$APPDIR/usr/lib64/webkit2gtk-4.1"
+  # The bundled WebKitGTK auxiliary processes are compiled against CI's
+  # Mesa/EGL and crash on user machines with different GPU stacks.
+  #
+  # Removing the bundled .so causes cascading library mismatches; instead,
+  # main.rs sets env vars (WEBKIT_DISABLE_COMPOSITING_MODE=1,
+  # WEBKIT_DISABLE_DMABUF_RENDERER=1, LIBGL_ALWAYS_SOFTWARE=1,
+  # GSK_RENDERER=cairo) at startup to force software rendering paths.
+  #
+  # The previous approach of rm -rf'ing the WebKit directories here had
+  # incorrect paths (missing the Debian multiarch x86_64-linux-gnu prefix)
+  # so the bundled processes were never actually removed.
 
   (
     cd "$BUNDLE_DIR"

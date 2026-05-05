@@ -74,16 +74,33 @@ fn timestamp() -> String {
 
 #[cfg(target_os = "linux")]
 fn configure_linux_webview_env() {
-    // Force software rendering for WebKitWebProcess stability on Linux
-    // This is the most reliable way to prevent SIGABRT (Signal 6) in WebKitGTK
+    // Force software rendering paths to prevent WebKitWebProcess SIGABRT (Signal 6).
+    // The WebProcess crashes when GPU drivers misbehave during WebGL or compositing.
+    //
+    // WEBKIT_DISABLE_COMPOSITING_MODE: disables the compositing thread so WebKit
+    // uses a simpler single-threaded rendering path.
     std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+
+    // WEBKIT_DISABLE_DMABUF_RENDERER: disables zero-copy DMA-BUF texture sharing
+    // between processes (WebKitGTK >= 2.42). Buggy kernel/DRM drivers can abort
+    // the WebProcess when dmabuf allocations fail.
     std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
-    std::env::set_var("WEBKIT_USE_GLIB_NETWORKING", "1");
 
-    // Disable sandboxing in the WebProcess if it's causing issues with AppImage mounts
-    std::env::set_var("WEBKIT_FORCE_SANDBOX", "0");
+    // Force Mesa's software rasterizer (llvmpipe) for all OpenGL/WebGL calls
+    // inside the WebProcess. This is the safest option — it avoids GPU driver
+    // bugs entirely at the cost of rendering performance for 3D content.
+    std::env::set_var("LIBGL_ALWAYS_SOFTWARE", "1");
 
-    // Ensure we use a stable GDK backend
+    // Force GTK to use the Cairo software renderer instead of OpenGL/Vulkan
+    // for widget drawing. Without this, GTK may still try to create a GL
+    // context, which can fail on headless or misconfigured GPU setups.
+    std::env::set_var("GSK_RENDERER", "cairo");
+
+    // On Wayland, use XWayland (GDK_BACKEND=x11) rather than native Wayland.
+    // The bundled WebKitGTK's EGL initialisation crashes on native Wayland
+    // compositors when the Mesa/EGL versions don't match (CI bundles ubuntu
+    // libraries; user machines run Arch/Fedora/etc. with newer Mesa). XWayland
+    // uses GLX which doesn't hit the same EGL code path.
     if std::env::var_os("WAYLAND_DISPLAY").is_some() {
         std::env::set_var("GDK_BACKEND", "x11");
     }

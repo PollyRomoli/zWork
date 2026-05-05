@@ -216,6 +216,16 @@ export default function LightRays({
       gl.canvas.style.width = "100%";
       gl.canvas.style.height = "100%";
 
+      const onContextLost = (e: Event) => {
+        e.preventDefault();
+        cancelled = true;
+        if (animationIdRef.current !== null) {
+          cancelAnimationFrame(animationIdRef.current);
+          animationIdRef.current = null;
+        }
+      };
+      gl.canvas.addEventListener("webglcontextlost", onContextLost);
+
       containerRef.current.replaceChildren(gl.canvas);
 
       const uniforms: Record<string, Uniform<any>> = {
@@ -283,6 +293,7 @@ export default function LightRays({
         window.removeEventListener("resize", updatePlacement);
 
         const canvas = renderer.gl.canvas;
+        canvas.removeEventListener("webglcontextlost", onContextLost);
         renderer.gl.getExtension("WEBGL_lose_context")?.loseContext();
         canvas.parentNode?.removeChild(canvas);
 

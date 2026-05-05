@@ -8,5 +8,9 @@ $downloadPath = "$env:TEMP\$ASSET"
 Write-Host "Downloading $ASSET..."
 Invoke-WebRequest -Uri $URL -OutFile $downloadPath
 Write-Host "Downloaded to $downloadPath"
+Write-Host "Closing any running zWork processes before install..."
+Get-Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.ProcessName -match '^zwork(-backend)?$' } |
+    Stop-Process -Force -ErrorAction SilentlyContinue
 Write-Host "Running installer..."
 Start-Process $downloadPath -Wait

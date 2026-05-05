@@ -346,12 +346,15 @@ const uid = () =>
 
 function pickAvailableModel(providers: ProvidersResponse | null, current = "") {
   if (!providers) return current;
-  if (current && providers.models.some((m) => m.id === current && m.configured)) {
+  const configuredModels = providers.models.filter((m) => m.configured);
+  if (current && configuredModels.some((m) => m.id === current)) {
     return current;
   }
+  if (providers.default_model && configuredModels.some((m) => m.id === providers.default_model)) {
+    return providers.default_model;
+  }
   return (
-    providers.default_model ||
-    providers.models.find((m) => m.configured)?.id ||
+    configuredModels[0]?.id ||
     providers.models[0]?.id ||
     ""
   );
@@ -736,7 +739,7 @@ export const useApp = create<AppState>((set, get) => ({
     if (!trimmed) return;
 
     const currentId = get().activeChatId;
-    const model = get().model || get().providers?.default_model || "";
+    const model = pickAvailableModel(get().providers, get().model);
     const inferredArtifactKind = inferArtifactKind(trimmed);
     const artifactMode = (options?.artifactMode ?? get().artifactMode) || !!inferredArtifactKind;
     const attachments = options?.attachments ?? [];
