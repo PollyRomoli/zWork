@@ -1101,18 +1101,21 @@ function PlanPanel() {
   const setView = useApp((s) => s.setView);
   const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     let alive = true;
     setLoading(true);
+    setError("");
     void fetchAnalyticsSummary()
       .then((data) => {
         if (!alive) return;
         setSummary(data);
       })
-      .catch(() => {
+      .catch((err) => {
         if (!alive) return;
         setSummary(null);
+        setError(err instanceof Error ? err.message : String(err));
       })
       .finally(() => {
         if (alive) setLoading(false);
@@ -1125,24 +1128,15 @@ function PlanPanel() {
   const remaining5h = Math.max((summary?.five_hour_limit || 0) - (summary?.five_hour_used || 0), 0);
   const remainingWeek = Math.max((summary?.weekly_limit || 0) - (summary?.weekly_used || 0), 0);
   const isPro = user?.tier === "pro";
-
-  // Calculate percentage for progress bars
-  const percent5h = (summary?.five_hour_limit || 1) > 0
-    ? Math.max(0, Math.min(100, (remaining5h / (summary?.five_hour_limit || 1)) * 100))
-    : 0;
-  const percentWeek = (summary?.weekly_limit || 1) > 0
-    ? Math.max(0, Math.min(100, (remainingWeek / (summary?.weekly_limit || 1)) * 100))
-    : 0;
-
-  const getQuotaColor = (percent: number) => {
-    if (percent <= 10) return "bg-rose-500";
-    if (percent <= 25) return "bg-amber-500";
-    return "bg-emerald-500";
+  const percentRemaining = (used = 0, limit = 0) => {
+    if (limit <= 0) return 0;
+    return Math.max(0, Math.min(100, ((limit - used) / limit) * 100));
   };
+  const percent5h = percentRemaining(summary?.five_hour_used, summary?.five_hour_limit);
+  const percentWeek = percentRemaining(summary?.weekly_used, summary?.weekly_limit);
 
   return (
     <div className="flex flex-col gap-5">
-      {/* Header */}
       <div>
         <h2 className="text-[20px] font-semibold tracking-tight text-ink">Your Plan</h2>
         <p className="mt-1 text-[14px] leading-6 text-ink-muted">
@@ -1152,54 +1146,93 @@ function PlanPanel() {
         </p>
       </div>
 
-      {/* Current Plan Card */}
-      <section className={cn(
-        "rounded-2xl border p-6 transition-all",
-        isPro
-          ? "border-line bg-paper-sunken"
-          : "border-line bg-paper-raised"
-      )}>
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-3">
+      {error && (
+        <section className="rounded-2xl border border-line bg-paper-raised p-4">
+          <div className="text-[13px] font-semibold text-ink">Plan unavailable</div>
+          <p className="mt-1 text-[13px] leading-5 text-ink-muted">
+            {error.includes("401") ? "Sign in to view cloud quota and plan details." : error}
+          </p>
+        </section>
+      )}
+
+      <section className="rounded-2xl border border-line bg-paper-raised p-5">
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex items-start gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-paper-sunken">
               {isPro ? (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-500/20">
-                  <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                </div>
+                <Sparkles className="h-5 w-5 text-ink-muted" />
               ) : (
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-paper-sunken">
-                  <Zap className="h-5 w-5 text-ink-muted" />
-                </div>
+                <Shield className="h-5 w-5 text-ink-muted" />
               )}
-              <div>
-                <div className="text-[24px] font-light tracking-tight text-ink">
-                  {isPro ? "zWork Pro" : "zWork Free"}
-                </div>
-                <p className="mt-1 text-[13px] text-ink-muted">
-                  {isPro
-                    ? "Unlocked: hosted routing, extended quotas, priority support"
-                    : "Perfect for getting started. Upgrade anytime."}
-                </p>
+            </div>
+            <div>
+              <div className="text-[24px] font-light tracking-tight text-ink">
+                {isPro ? "zWork Pro" : "zWork Free"}
               </div>
+              <p className="mt-1 max-w-[420px] text-[13px] leading-5 text-ink-muted">
+                {isPro
+                  ? "Hosted routing and higher usage limits are active on this account."
+                  : "Free access is active. Upgrade when the rolling quota becomes a constraint."}
+              </p>
+              {user?.email && (
+                <div className="mt-3 text-[12px] text-ink-faint">{user.email}</div>
+              )}
             </div>
           </div>
-          {!isPro && (
-            <button
-              type="button"
-              onClick={() => setView("analytics")}
-              className="press ring-focus shrink-0 rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-paper hover:bg-ink/90"
-            >
-              Upgrade to Pro
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => setView("analytics")}
+            className="press ring-focus inline-flex shrink-0 items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-paper hover:bg-ink-soft"
+          >
+            Open analytics
+            <ArrowRight className="h-3.5 w-3.5" />
+          </button>
         </div>
       </section>
 
-      {/* Usage Cards */}
-      <section className="grid gap-4 md:grid-cols-2">
-        {/* 5-Hour Quota */}
-        <div className="rounded-2xl border border-line bg-paper-raised p-5">
-          <div className="flex items-center justify-between">
+      <section className="rounded-2xl border border-line bg-paper p-5">
+        <div className="mb-4 flex items-start justify-between gap-4">
+          <div>
+            <div className="text-[13px] font-semibold text-ink">Router status</div>
+            <p className="mt-1 text-[12.5px] leading-5 text-ink-muted">
+              {loading
+                ? "Checking hosted routing."
+                : summary?.managed_gateway_status || "No router status available."}
+            </p>
+          </div>
+          <div
+            className={cn(
+              "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px]",
+              summary?.managed_gateway_ready
+                ? "border-line bg-paper-raised text-ink"
+                : "border-line bg-paper-sunken text-ink-muted",
+            )}
+          >
+            <Zap className="h-3.5 w-3.5" />
+            {loading ? "Checking" : summary?.managed_gateway_ready ? "Ready" : "Not ready"}
+          </div>
+        </div>
+      </section>
+
+      <section className="rounded-2xl border border-line bg-paper-raised p-5">
+        <div className="mb-4 flex items-center justify-between gap-4">
+          <div>
+            <div className="text-[13px] font-semibold text-ink">Quota</div>
+            <p className="mt-1 text-[12.5px] text-ink-muted">Rolling root request limits.</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setView("analytics")}
+            className="press ring-focus inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1.5 text-[12px] text-ink-muted hover:bg-paper-sunken hover:text-ink"
+          >
+            <BarChart3 className="h-3.5 w-3.5" />
+            Details
+          </button>
+        </div>
+
+        <div className="space-y-5">
+          <div>
+            <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-paper-sunken">
                 <Clock className="h-4 w-4 text-ink-muted" />
@@ -1211,7 +1244,7 @@ function PlanPanel() {
             </div>
             <div className="text-right">
               <div className="text-[24px] font-light tracking-tight text-ink">
-                {loading ? "…" : remaining5h}
+                {loading ? "..." : remaining5h}
               </div>
               <div className="text-[12px] text-ink-muted">
                 {loading ? "loading" : "remaining"}
@@ -1220,7 +1253,7 @@ function PlanPanel() {
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken">
             <div
-              className={cn("h-full rounded-full transition-all duration-500", getQuotaColor(percent5h))}
+              className="h-full rounded-full bg-ink/70 transition-all duration-500"
               style={{ width: `${percent5h}%` }}
             />
           </div>
@@ -1229,9 +1262,8 @@ function PlanPanel() {
           </div>
         </div>
 
-        {/* Weekly Quota */}
-        <div className="rounded-2xl border border-line bg-paper-raised p-5">
-          <div className="flex items-center justify-between">
+          <div>
+            <div className="flex items-center justify-between gap-4">
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-paper-sunken">
                 <Calendar className="h-4 w-4 text-ink-muted" />
@@ -1243,7 +1275,7 @@ function PlanPanel() {
             </div>
             <div className="text-right">
               <div className="text-[24px] font-light tracking-tight text-ink">
-                {loading ? "…" : remainingWeek}
+                {loading ? "..." : remainingWeek}
               </div>
               <div className="text-[12px] text-ink-muted">
                 {loading ? "loading" : "remaining"}
@@ -1252,7 +1284,7 @@ function PlanPanel() {
           </div>
           <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken">
             <div
-              className={cn("h-full rounded-full transition-all duration-500", getQuotaColor(percentWeek))}
+              className="h-full rounded-full bg-ink/70 transition-all duration-500"
               style={{ width: `${percentWeek}%` }}
             />
           </div>
@@ -1260,85 +1292,6 @@ function PlanPanel() {
             {loading ? "Loading..." : `${summary?.weekly_used || 0} used of ${summary?.weekly_limit || 0}`}
           </div>
         </div>
-      </section>
-
-      {/* Quick Actions */}
-      <section className="rounded-2xl border border-line bg-paper-raised p-5">
-        <div className="text-[13px] font-semibold text-ink mb-4">Quick actions</div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <button
-            type="button"
-            onClick={() => setView("analytics")}
-            className="press ring-focus flex items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-left hover:border-line-strong hover:bg-paper-sunken"
-          >
-            <BarChart3 className="h-5 w-5 text-ink-muted" />
-            <div>
-              <div className="text-[13px] font-medium text-ink">View usage</div>
-              <div className="text-[11.5px] text-ink-muted">See detailed analytics</div>
-            </div>
-            <ArrowRight className="ml-auto h-4 w-4 text-ink-faint" />
-          </button>
-          {isPro ? (
-            <button
-              type="button"
-              onClick={() => setView("analytics")}
-              className="press ring-focus flex items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-left hover:border-line-strong hover:bg-paper-sunken"
-            >
-              <Zap className="h-5 w-5 text-ink-muted" />
-              <div>
-                <div className="text-[13px] font-medium text-ink">Hosted mode</div>
-                <div className="text-[11.5px] text-ink-muted">Manage zWork Router</div>
-              </div>
-              <ArrowRight className="ml-auto h-4 w-4 text-ink-faint" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setView("analytics")}
-              className="press ring-focus flex items-center gap-3 rounded-xl border border-line bg-paper px-4 py-3 text-left hover:border-line-strong hover:bg-paper-sunken"
-            >
-              <Sparkles className="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-              <div>
-                <div className="text-[13px] font-medium text-ink">Upgrade now</div>
-                <div className="text-[11.5px] text-ink-muted">Get Pro access</div>
-              </div>
-              <ArrowRight className="ml-auto h-4 w-4 text-ink-faint" />
-            </button>
-          )}
-        </div>
-      </section>
-
-      {/* Info cards */}
-      <section className="rounded-2xl border border-line bg-paper-raised p-5">
-        <div className="text-[13px] font-semibold text-ink mb-4">How limits work</div>
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="flex gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper-sunken">
-              <span className="text-[12px] font-bold text-ink-faint">1</span>
-            </div>
-            <div>
-              <div className="text-[13px] font-medium text-ink">Root requests</div>
-              <div className="mt-1 text-[12px] text-ink-muted">What you ask zWork to do counts toward your limit</div>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper-sunken">
-              <span className="text-[12px] font-bold text-ink-faint">2</span>
-            </div>
-            <div>
-              <div className="text-[13px] font-medium text-ink">Internal turns</div>
-              <div className="mt-1 text-[12px] text-ink-muted">Background work doesn't use up your quota</div>
-            </div>
-          </div>
-          <div className="flex gap-3">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-paper-sunken">
-              <span className="text-[12px] font-bold text-ink-faint">3</span>
-            </div>
-            <div>
-              <div className="text-[13px] font-medium text-ink">Rolling windows</div>
-              <div className="mt-1 text-[12px] text-ink-muted">Limits reset gradually as time passes</div>
-            </div>
-          </div>
         </div>
       </section>
     </div>

@@ -28,6 +28,12 @@ python3 -m PyInstaller \
   --onefile \
   --name zwork-backend \
   --add-data "$ROOT_DIR/zWork-Skills:zWork-Skills" \
+  --collect-submodules keyring \
+  --collect-submodules keyring.backends \
+  --collect-submodules sidecar \
+  --hidden-import mcp \
+  --hidden-import mcp.client.stdio \
+  --hidden-import mcp.types \
   --distpath "$DIST_DIR" \
   --workpath "$WORK_DIR" \
   --specpath "$SPEC_DIR" \

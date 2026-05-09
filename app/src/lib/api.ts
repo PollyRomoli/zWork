@@ -411,6 +411,7 @@ export async function streamChat(
   let sawEvent = false;
   let sawTerminal = false;
   let sawServerError = false;
+  let attemptedRecovery = false;
   const parseFrame = (frame: string) => {
     for (const line of frame.split("\n")) {
       if (!line.startsWith("data:")) continue;
@@ -432,7 +433,7 @@ export async function streamChat(
     }
   };
 
-  try {
+  const readStream = async () => {
     const resp = await fetch(u("/api/chat/stream"), {
       method: "POST",
       headers: { "content-type": "application/json" },
@@ -469,28 +470,46 @@ export async function streamChat(
       });
       onEvent({ type: "end" });
     }
-  } catch (error) {
-    if (error instanceof DOMException && error.name === "AbortError") {
-      throw error;
-    }
-    if (sawTerminal) {
+  };
+
+  while (true) {
+    try {
+      if (IS_TAURI) {
+        await api.waitForBackend(attemptedRecovery ? 30 : 12).catch(() => {});
+      }
+      await readStream();
       return;
-    }
-    if (sawEvent && !sawServerError) {
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        throw error;
+      }
+      if (sawTerminal) {
+        return;
+      }
+      if (sawEvent && !sawServerError) {
+        onEvent({
+          type: "error",
+          text: "The local backend ended this response unexpectedly. Partial progress is preserved above.",
+        });
+        onEvent({ type: "end" });
+        return;
+      }
+      if (IS_TAURI && !sawEvent && !attemptedRecovery) {
+        attemptedRecovery = true;
+        onEvent({ type: "status", text: "Restarting local backend" });
+        await invokeBackendCommand("restart_backend");
+        await api.waitForBackend(30).catch(() => {});
+        continue;
+      }
+      const detail =
+        error instanceof Error && error.message
+          ? error.message
+          : String(error || "unknown error");
       onEvent({
         type: "error",
-        text: "The local backend ended this response unexpectedly. Partial progress is preserved above.",
+        text: `Lost connection to the local backend. Partial progress may be shown above. ${detail}`,
       });
-      onEvent({ type: "end" });
       return;
     }
-    const detail =
-      error instanceof Error && error.message
-        ? error.message
-        : String(error || "unknown error");
-    onEvent({
-      type: "error",
-      text: `Lost connection to the local backend. Partial progress may be shown above. ${detail}`,
-    });
   }
 }

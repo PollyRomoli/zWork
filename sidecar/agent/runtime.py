@@ -38,19 +38,18 @@ class RunContext:
     _active_processes: set[int] = field(default_factory=set)
 
     def log(self, event: str, **fields: object) -> None:
-        runlog.append(
-            self.run_id,
-            event,
-            chat_id=self.chat_id,
-            requested_model_id=self.requested_model_id,
-            resolved_model_id=self.resolved_model_id,
-            provider_base_url=self.provider_base_url,
-            provider_source=self.provider_source,
-            turn_index=self.turn_index,
-            tool_calls=self.tool_calls,
-            last_event_type=self.last_event_type,
-            **fields,
-        )
+        payload = {
+            "chat_id": self.chat_id,
+            "requested_model_id": self.requested_model_id,
+            "resolved_model_id": self.resolved_model_id,
+            "provider_base_url": self.provider_base_url,
+            "provider_source": self.provider_source,
+            "turn_index": self.turn_index,
+            "tool_calls": self.tool_calls,
+            "last_event_type": self.last_event_type,
+        }
+        payload.update(fields)
+        runlog.append(self.run_id, event, **payload)
 
     def remaining_run_seconds(self) -> float:
         elapsed = time.monotonic() - self.started_monotonic
@@ -87,4 +86,11 @@ async def run_scope(ctx: RunContext) -> AsyncIterator[RunContext]:
     try:
         yield ctx
     finally:
-        _CURRENT_RUN.reset(token)
+        try:
+            _CURRENT_RUN.reset(token)
+        except ValueError:
+            # Streaming responses can finish in a Starlette task context that
+            # differs from the one that created the token. The stream itself is
+            # already ending; do not turn cleanup into a user-visible backend
+            # failure.
+            pass

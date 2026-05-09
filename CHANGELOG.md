@@ -6,6 +6,17 @@ All notable changes to zWork are documented here.
 
 - Nothing yet.
 
+## v0.3.18-beta.7
+
+**Hotfix for local backend streaming and real usage surfaces.**
+
+- fixed `/api/chat/stream` returning 500 before the first SSE event by creating run IDs with the required prefix
+- fixed run logging/context cleanup errors that could turn provider failures into backend failures
+- added desktop chat preflight/recovery so Tauri restarts the local backend once before surfacing a connection failure
+- replaced hardcoded Analytics data with live `/api/analytics/summary` usage, quota, active-run, and owner provider health data
+- simplified the Settings Plan panel to show account tier, router readiness, and quota without redundant cards
+- hardened PyInstaller backend packaging for keyring, sidecar, and MCP runtime imports without pulling in optional MCP CLI dependencies
+
 ## v0.3.18-beta.6
 
 **Harness hardening, DeepSeek router release, and updater readiness.**

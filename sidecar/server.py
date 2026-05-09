@@ -1211,7 +1211,7 @@ async def chat_stream(req: StreamRequest):
     if assistant_msg is None:
         raise HTTPException(500, "failed to initialize assistant message")
     run_ctx = RunContext(
-        run_id=new_id(),
+        run_id=new_id("run"),
         chat_id=chat.id,
         requested_model_id=req.model or model_id,
         resolved_model_id=model_meta.get("model_id") or model_id,
