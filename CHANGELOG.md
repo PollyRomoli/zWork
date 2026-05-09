@@ -4,7 +4,14 @@ All notable changes to zWork are documented here.
 
 ## Unreleased
 
-- Nothing yet.
+**Harness feature integration: plan mode, compaction, and project context.**
+
+- integrated conversation compaction into chat stream (summarizes middle when >120k chars)
+- added project context injection to system prompt when project_id is set
+- added plan mode toggle to chat composer for read-only exploration
+- added auto-approve destructive toggle to control permission gate
+- added permission and compaction SSE events for UI feedback
+- fixed circular import between providers.py and compaction.py
 
 ## v0.3.18-beta.7
 
