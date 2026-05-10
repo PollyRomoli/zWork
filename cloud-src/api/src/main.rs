@@ -18,7 +18,7 @@ use tokio::net::TcpListener;
 use tower_governor::governor::GovernorConfigBuilder;
 use tower_governor::key_extractor::SmartIpKeyExtractor;
 use tower_governor::GovernorLayer;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tracing::{error, info};
 use uuid::Uuid;
 
@@ -2439,7 +2439,7 @@ async fn admin_list_users(
     // TODO: Add proper owner auth
     // let _owner = ensure_owner_or_service(&state, &headers).await?;
 
-    let users = sqlx::query(
+    let users: Vec<AdminUserRow> = sqlx::query(
         r#"
         SELECT 
             u.user_id,
@@ -2486,7 +2486,7 @@ async fn admin_usage_by_time(
     // TODO: Add proper owner auth
     // let _owner = ensure_owner_or_service(&state, &headers).await?;
 
-    let usage = sqlx::query(
+    let usage: Vec<AdminUsageByTime> = sqlx::query(
         r#"
         SELECT 
             DATE(created_at) as date,
@@ -2525,7 +2525,7 @@ async fn admin_usage_by_model(
             .await
             .unwrap_or(1);
 
-    let usage = sqlx::query(
+    let usage: Vec<AdminUsageByModel> = sqlx::query(
         r#"
         SELECT 
             model_id,
