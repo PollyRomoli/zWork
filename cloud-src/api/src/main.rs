@@ -1487,6 +1487,9 @@ async fn ai_proxy_anthropic(
         if let Some(obj) = body_json.as_object_mut() {
             obj.insert("model".to_string(), Value::String(provider.primary_model.clone()));
             obj.insert("stream".to_string(), Value::Bool(true));
+            // Disable DeepSeek thinking mode to avoid reasoning_content issues
+            // in multi-turn conversations with tool calls
+            obj.insert("extra_body".to_string(), serde_json::json!({"thinking": {"type": "disabled"}}));
         }
 
         let endpoint = format!("{}/v1/messages", provider.base_url.trim_end_matches('/'));
@@ -3038,7 +3041,8 @@ async fn main() {
     let cors = CorsLayer::new()
         .allow_origin(cors_allowed_origins())
         .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_headers(Any)
+        .allow_credentials(true);
 
     // Per-IP rate limit applied only to the credential-handling auth endpoints.
     // 1 token/sec replenish with a burst of 5 covers normal interactive use
