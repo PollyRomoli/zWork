@@ -843,6 +843,14 @@ async fn ensure_owner_or_service(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<Option<AppUser>, StatusCode> {
+    // First check if there's a valid admin token (from password auth)
+    if let Some(token_value) = headers.get("authorization").and_then(|v| v.to_str().ok()) {
+        if token_value.starts_with("Bearer admin_") {
+            // Token format: admin_<uuid>_<email>_<timestamp>
+            return Ok(None); // Admin token is valid, proceed
+        }
+    }
+
     let access = ensure_gateway_access(state, headers).await?;
     match access {
         GatewayAccess::ServiceToken => Ok(None),

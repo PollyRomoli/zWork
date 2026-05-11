@@ -73,7 +73,8 @@ fn append_log(msg: &str) {
 
 fn backend_http_healthy() -> bool {
     let addr = "127.0.0.1:8787";
-    let timeout = Duration::from_millis(600);
+    // Use a generous timeout so slow-but-alive backends aren't killed mid-stream.
+    let timeout = Duration::from_secs(5);
     let mut stream =
         match TcpStream::connect_timeout(&addr.parse().expect("valid backend addr"), timeout) {
             Ok(stream) => stream,
@@ -356,11 +357,19 @@ fn ensure_backend_running(app: &tauri::AppHandle, backend: &Backend) -> Result<b
 
 fn start_backend_watchdog(app: tauri::AppHandle) {
     std::thread::spawn(move || loop {
-        std::thread::sleep(Duration::from_secs(10));
+        std::thread::sleep(Duration::from_secs(30));
         if let Some(backend) = app.try_state::<Backend>() {
             if !backend_http_healthy() {
-                append_log("Backend watchdog detected unhealthy backend");
-                let _ = ensure_backend_running(&app, &backend);
+                // One retry after a short pause — a single slow response
+                // during heavy streaming work is not a dead backend.
+                append_log("Backend watchdog: first health check failed, retrying...");
+                std::thread::sleep(Duration::from_secs(3));
+                if !backend_http_healthy() {
+                    append_log("Backend watchdog: second health check failed, restarting backend");
+                    let _ = ensure_backend_running(&app, &backend);
+                } else {
+                    append_log("Backend watchdog: second health check passed, backend is alive");
+                }
             }
         }
     });

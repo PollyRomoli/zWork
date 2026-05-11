@@ -823,9 +823,8 @@ function ApiKeyStep({
   initial: OnboardingCredential | null;
   onChange: (c: OnboardingCredential | null) => void;
 }) {
-  const user = useApp((s) => s.user);
   const hasCloudToken = typeof window !== "undefined" && !!window.localStorage.getItem("zwork:cloud-token");
-  const cloudUnlocked = hasCloudToken && user?.tier === "pro";
+  const cloudUnlocked = !!hasCloudToken;
   const visiblePresets = PRESETS.filter((preset) => !preset.managed || hasCloudToken);
   const recommended = visiblePresets.find((p) => p.recommended) || visiblePresets[0];
   const others = visiblePresets.filter((p) => !p.recommended);
@@ -934,7 +933,7 @@ function ApiKeyStep({
                     ? "border border-emerald-200 bg-emerald-100 text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-200"
                     : "border border-amber-200 bg-amber-100 text-amber-700",
                 )}>
-                  {cloudUnlocked ? "Managed" : "Unlock pro first"}
+                  {cloudUnlocked ? "Managed" : "Sign in to use"}
                 </span>
               ) : (
                 <span className="rounded-full border border-emerald-200 bg-emerald-100 px-1.5 py-0.5 text-[10px] font-medium text-emerald-700 dark:border-emerald-400/40 dark:bg-emerald-500/20 dark:text-emerald-200">

@@ -39,6 +39,7 @@ from .compaction import (
 from .projects import get as project_get
 from .runtime import RunContext, run_scope
 from .tools import TOOL_SCHEMAS, execute_tool, filter_tools_for_plan_mode, parse_tool_calls, tool_risk
+from .subagent import SubagentSpawner
 
 
 MAX_TURNS = 24
@@ -884,6 +885,10 @@ async def stream_chat(
 
     ctx = run_ctx or RunContext(run_id=str(uuid.uuid4()), chat_id="", requested_model_id=zwork_model_id)
     ctx.resolved_model_id = real_model_id
+
+    # Initialize subagent spawner and attach to context
+    spawner = SubagentSpawner(parent_run_id=ctx.run_id, parent_context=ctx)
+    ctx._subagent_spawner = spawner
 
     # ---- Compaction: summarize long conversations ----
     if should_compact(messages):

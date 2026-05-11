@@ -27,7 +27,7 @@ _KEYRING_AVAILABLE: bool | None = None
 
 
 def _mode() -> str:
-    return (os.environ.get(ENV_STORE_MODE) or "auto").strip().lower()
+    return (os.environ.get(ENV_STORE_MODE) or "file").strip().lower()
 
 
 def _secret_file() -> Path:
@@ -98,6 +98,13 @@ def get_api_key(credential: str) -> str:
         return ""
 
     mode = _mode()
+
+    # Try file store first — it never triggers OS keychain prompts.
+    if mode in ("auto", "file"):
+        value = _read_file_store().get(credential, "")
+        if value:
+            return value
+
     if mode in ("auto", "keyring"):
         keyring = _load_keyring()
         if keyring is not None:
@@ -108,9 +115,6 @@ def get_api_key(credential: str) -> str:
             except Exception:
                 if mode == "keyring":
                     return ""
-
-    if mode in ("auto", "file"):
-        return _read_file_store().get(credential, "")
 
     return ""
 
@@ -124,21 +128,37 @@ def set_api_key(credential: str, value: str) -> None:
     keyring = _load_keyring() if mode in ("auto", "keyring") else None
 
     if value:
+        # Prefer file store — no OS prompts.
+        if mode in ("auto", "file"):
+            current = _read_file_store()
+            current[credential] = value
+            _write_file_store(current)
+            # Also write to keyring if available (best-effort sync).
+            if keyring is not None:
+                try:
+                    keyring.set_password(SERVICE_NAME, _account(credential), value)
+                except Exception:
+                    pass
+            return
+
         if keyring is not None:
             try:
                 keyring.set_password(SERVICE_NAME, _account(credential), value)
-                if mode == "auto":
-                    _delete_from_file_store(credential)
                 return
             except Exception:
                 if mode == "keyring":
                     raise
 
-        if mode in ("auto", "file"):
+        # Fallback to file for keyring mode when keyring write fails.
+        if mode == "keyring":
             current = _read_file_store()
             current[credential] = value
             _write_file_store(current)
         return
+
+    # Delete (empty value).
+    if mode in ("auto", "file"):
+        _delete_from_file_store(credential)
 
     if keyring is not None:
         try:
@@ -146,9 +166,6 @@ def set_api_key(credential: str, value: str) -> None:
         except Exception:
             if mode == "keyring":
                 raise
-
-    if mode in ("auto", "file"):
-        _delete_from_file_store(credential)
 
 
 def delete_api_key(credential: str) -> None:

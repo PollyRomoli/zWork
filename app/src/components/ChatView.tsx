@@ -6,6 +6,7 @@ import { isMacOS } from "../lib/platform";
 import { ChatInput } from "./ChatInput";
 import { Message } from "./Message";
 import { IconButton } from "./IconButton";
+import { ConcurrentWorkBanner } from "./ConcurrentWorkBanner";
 
 export function ChatView() {
   const macOS = isMacOS();
@@ -100,6 +101,7 @@ export function ChatView() {
         {/* Messages */}
         <div className="flex-1 overflow-y-auto">
           <div className="mx-auto flex max-w-[960px] flex-col gap-5 px-6 py-8">
+            <ConcurrentWorkBanner />
             {chat.messages.map((m, idx) => {
               const isLast = idx === chat.messages.length - 1;
               const isStreaming = !!chat.working && isLast;

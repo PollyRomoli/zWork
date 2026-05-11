@@ -13,6 +13,7 @@ import {
   MoreHorizontal,
   FolderOpen,
   BarChart3,
+  CreditCard,
 } from "lucide-react";
 import { cn } from "../lib/cn";
 import { isMacOS } from "../lib/platform";
@@ -244,6 +245,13 @@ export function Sidebar() {
           collapsed={!open}
           active={view === "analytics"}
           onClick={() => setView("analytics")}
+        />
+        <SidebarButton
+          icon={<CreditCard />}
+          label="Plan"
+          collapsed={!open}
+          active={view === "plan"}
+          onClick={() => setView("plan")}
         />
         <SidebarButton
           icon={<Settings />}

@@ -83,6 +83,8 @@ def _matches_destructive_command(command: str) -> tuple[bool, str]:
 def tool_risk(tool_name: str, params: dict[str, Any]) -> tuple[str, str]:
     if tool_name in READ_ONLY_TOOLS:
         return "safe", "read-only tool"
+    if tool_name == "spawn_agent":
+        return "safe", "spawns a subagent which follows its own permission checks"
     if tool_name == "run_command":
         command = str(params.get("command") or "")
         destructive, reason = _matches_destructive_command(command)
@@ -273,6 +275,28 @@ TOOL_SCHEMAS: list[dict] = [
                 "cwd": {"type": "string", "description": "Working directory for the command"},
             },
             "required": ["subcommand"],
+        },
+    },
+    {
+        "name": "spawn_agent",
+        "description": (
+            "Spawn a subagent to work on a separate task in parallel. "
+            "Use this when you have independent tasks that can be worked on concurrently, "
+            "such as: reading multiple unrelated files, searching different directories, "
+            "or running non-sequential commands. The subagent will run with the same model "
+            "and tools available to you. Provide a clear task description and any necessary "
+            "context as the initial message."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "task": {"type": "string", "description": "Clear description of what the subagent should do"},
+                "context": {
+                    "type": "string",
+                    "description": "Additional context or instructions for the subagent (optional)",
+                },
+            },
+            "required": ["task"],
         },
     },
 ]
@@ -546,6 +570,53 @@ async def execute_tool(tool_name: str, params: dict[str, Any]) -> AsyncIterator[
             if run is not None:
                 run.log("tool_finished", tool_name=tool_name, ok=False, output=_friendly_error(e, "Check that dctl is installed and the subcommand is valid. "))
             yield {"type": "tool_result", "tool": tool_name, "ok": False, "message": _friendly_error(e, "Check that dctl is installed and the subcommand is valid. ")}
+        return
+
+    if tool_name == "spawn_agent":
+        task = params.get("task", "")
+        context = params.get("context", "")
+        if not task:
+            yield {"type": "tool_result", "tool": tool_name, "ok": False,
+                   "message": "spawn_agent requires a 'task' parameter describing what to do."}
+            return
+
+        label = f"Agent: {task[:40]}{'...' if len(task) > 40 else ''}"
+        yield {"type": "activity", "id": tool_id, "label": label, "icon": "bot", "done": False}
+
+        try:
+            from .subagent import spawn_agent
+
+            # Build messages for the subagent
+            sub_messages = []
+            if context:
+                sub_messages.append({"role": "user", "content": f"Context: {context}"})
+            sub_messages.append({"role": "user", "content": task})
+
+            # Get the current model from the run context
+            model_id = run.requested_model_id if run else "claude-sonnet-4-5-20250929"
+
+            # Stream the subagent
+            full_result = []
+            async for evt in spawn_agent(task, sub_messages, model_id, plan_mode=False):
+                if evt.get("type") == "subagent_delta":
+                    full_result.append(evt.get("text", ""))
+                elif evt.get("type") == "subagent_done":
+                    if evt.get("error"):
+                        yield {"type": "activity", "id": tool_id, "label": f"Failed: {label}", "icon": "bot", "done": True}
+                        yield {"type": "tool_result", "tool": tool_name, "ok": False,
+                               "message": f"Subagent failed: {evt.get('error')}"}
+                        return
+
+            result = "".join(full_result)
+            yield {"type": "activity", "id": tool_id, "label": label, "icon": "bot", "done": True}
+            if run is not None:
+                run.log("tool_finished", tool_name=tool_name, ok=True, output=f"Subagent completed with {len(result)} chars")
+            yield {"type": "tool_result", "tool": tool_name, "ok": True, "message": result}
+        except Exception as e:
+            yield {"type": "activity", "id": tool_id, "label": f"Failed: {label}", "icon": "bot", "done": True}
+            if run is not None:
+                run.log("tool_finished", tool_name=tool_name, ok=False, output=_friendly_error(e))
+            yield {"type": "tool_result", "tool": tool_name, "ok": False, "message": _friendly_error(e)}
         return
 
     if run is not None:

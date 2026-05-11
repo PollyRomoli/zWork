@@ -21,6 +21,7 @@ const SearchModal = lazy(() => import("./components/SearchModal").then((m) => ({
 const ProjectView = lazy(() => import("./components/ProjectView").then((m) => ({ default: m.ProjectView })));
 const ArtifactPanel = lazy(() => import("./components/ArtifactPanel").then((m) => ({ default: m.ArtifactPanel })));
 const AnalyticsPage = lazy(() => import("./components/AnalyticsPage").then((m) => ({ default: m.AnalyticsPage })));
+const PlanPage = lazy(() => import("./components/PlanPage").then((m) => ({ default: m.PlanPage })));
 
 export default function App() {
   const previewMode = getPreviewMode();
@@ -334,6 +335,10 @@ export default function App() {
           ) : view === "analytics" ? (
             <Suspense fallback={panelFallback}>
               <AnalyticsPage />
+            </Suspense>
+          ) : view === "plan" ? (
+            <Suspense fallback={panelFallback}>
+              <PlanPage cloudUser={cloudUser!} />
             </Suspense>
           ) : view === "projects" ? (
             <Suspense fallback={panelFallback}>

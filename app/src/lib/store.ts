@@ -68,6 +68,16 @@ export interface Activity {
   done: boolean;
 }
 
+export interface SubagentTask {
+  id: string;
+  description: string;
+  status: "pending" | "running" | "completed" | "failed";
+  result?: string;
+  error?: string;
+  deltaAccumulator?: string; // Accumulated delta text
+  activityCount?: number; // Number of activities seen
+}
+
 export interface Chat {
   id: string;
   title: string;
@@ -87,7 +97,7 @@ export interface Chat {
   activeArtifactId?: string | null;
 }
 
-export type View = "chat" | "settings" | "projects" | "analytics";
+export type View = "chat" | "settings" | "projects" | "analytics" | "plan";
 
 export type SettingsSection =
   | "account"
@@ -362,6 +372,11 @@ interface AppState {
   autoApproveDestructive: boolean;
   setAutoApproveDestructive: (v: boolean) => void;
 
+  // Subagent state
+  subagents: SubagentTask[];
+  updateSubagent: (task: SubagentTask) => void;
+  clearSubagents: () => void;
+
   // Actions
   bootstrap: () => Promise<void>;
   refreshChats: () => Promise<void>;
@@ -550,6 +565,18 @@ export const useApp = create<AppState>((set, get) => ({
   setPlanMode: (v) => set({ planMode: v }),
   autoApproveDestructive: false,
   setAutoApproveDestructive: (v) => set({ autoApproveDestructive: v }),
+
+  // Subagent state
+  subagents: [],
+  updateSubagent: (task: SubagentTask) =>
+    set((s) => {
+      const idx = s.subagents.findIndex((sa) => sa.id === task.id);
+      if (idx < 0) return s;
+      const updated = [...s.subagents];
+      updated[idx] = task;
+      return { subagents: updated };
+    }),
+  clearSubagents: () => set({ subagents: [] }),
 
   refreshProjects: async () => {
     try {
@@ -820,6 +847,9 @@ export const useApp = create<AppState>((set, get) => ({
     const trimmed = text.trim();
     if (!trimmed) return;
 
+    // Clear any previous subagent state
+    set({ subagents: [] });
+
     const currentId = get().activeChatId;
     const model = pickAvailableModel(get().providers, get().model);
     const inferredArtifactKind = inferArtifactKind(trimmed);
@@ -1066,6 +1096,89 @@ export const useApp = create<AppState>((set, get) => ({
                 };
               });
             }
+          } else if (evt.type === "subagent_started") {
+            // A new subagent has been spawned
+            set((s) => {
+              const existing = s.subagents.find((sa) => sa.id === evt.task_id);
+              if (existing) return s;
+              const newSubagent: SubagentTask = {
+                id: evt.task_id,
+                description: evt.description,
+                status: "running",
+                deltaAccumulator: "",
+                activityCount: 0,
+              };
+              return {
+                subagents: [...s.subagents, newSubagent],
+                chats: {
+                  ...s.chats,
+                  [localId]: {
+                    ...s.chats[localId]!,
+                    status: `Working on ${s.subagents.length + 1} task${s.subagents.length > 0 ? "s" : ""}...`,
+                  },
+                },
+              };
+            });
+          } else if (evt.type === "subagent_progress") {
+            // Subagent status update
+            set((s) => {
+              const idx = s.subagents.findIndex((sa) => sa.id === evt.task_id);
+              if (idx < 0) return s;
+              const updated = [...s.subagents];
+              updated[idx] = { ...updated[idx], status: evt.status };
+              return { subagents: updated };
+            });
+          } else if (evt.type === "subagent_delta") {
+            // Subagent is producing text output
+            set((s) => {
+              const idx = s.subagents.findIndex((sa) => sa.id === evt.task_id);
+              if (idx < 0) return s;
+              const updated = [...s.subagents];
+              const existing = updated[idx];
+              updated[idx] = {
+                ...existing,
+                deltaAccumulator: (existing.deltaAccumulator || "") + evt.text,
+              };
+              return { subagents: updated };
+            });
+          } else if (evt.type === "subagent_activity") {
+            // Subagent activity (tool execution, etc.)
+            set((s) => {
+              const idx = s.subagents.findIndex((sa) => sa.id === evt.task_id);
+              if (idx < 0) return s;
+              const updated = [...s.subagents];
+              const existing = updated[idx];
+              updated[idx] = {
+                ...existing,
+                activityCount: (existing.activityCount || 0) + 1,
+              };
+              return { subagents: updated };
+            });
+          } else if (evt.type === "subagent_done") {
+            // Subagent completed
+            set((s) => {
+              const idx = s.subagents.findIndex((sa) => sa.id === evt.task_id);
+              if (idx < 0) return s;
+              const updated = [...s.subagents];
+              updated[idx] = {
+                ...updated[idx],
+                status: evt.error ? "failed" : "completed",
+                result: evt.result,
+                error: evt.error,
+              };
+              // Update status based on remaining subagents
+              const remaining = updated.filter((sa) => sa.status === "running").length;
+              return {
+                subagents: updated,
+                chats: {
+                  ...s.chats,
+                  [localId]: {
+                    ...s.chats[localId]!,
+                    status: remaining > 0 ? `Working on ${remaining} task${remaining > 1 ? "s" : ""}...` : undefined,
+                  },
+                },
+              };
+            });
           } else if (evt.type === "heartbeat") {
             return;
           } else if (evt.type === "done" || evt.type === "end") {

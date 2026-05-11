@@ -4,6 +4,16 @@ All notable changes to zWork are documented here.
 
 ## Unreleased
 
+**Advanced agent loop: subagent spawning and tool streaming.**
+
+- added `spawn_agent` tool for explicit parallel task delegation
+- added subagent spawning system with `SubagentSpawner` for concurrent agent execution
+- added `ConcurrentWorkBanner` UI component showing active subagent progress
+- added `tool_progress` SSE event type for streaming tool progress updates
+- added `MilestoneTracker` in streaming.py for meaningful progress updates
+- added subagent state tracking to frontend store with `SubagentTask` interface
+- added subagent SSE events: `subagent_started`, `subagent_progress`, `subagent_delta`, `subagent_activity`, `subagent_done`
+
 **Harness feature integration: plan mode, compaction, and project context.**
 
 - integrated conversation compaction into chat stream (summarizes middle when >120k chars)

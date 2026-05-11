@@ -150,7 +150,7 @@ async function waitForBackendReady(attempts = 60) {
 
 async function localFetch(path: string, init?: RequestInit) {
   if (IS_TAURI) {
-    await waitForBackendReady(20);
+    await waitForBackendReady(6);
   }
   return fetch(u(path), init);
 }
@@ -403,8 +403,14 @@ export type StreamEvent =
   | { type: "needs_setup" }
   | { type: "activity"; id: string; label: string; icon?: string; done?: boolean }
   | { type: "tool_result"; tool: string; ok: boolean; message: string }
+  | { type: "tool_progress"; tool_id: string; label: string }
   | { type: "permission"; tool: string; risk: "safe" | "sensitive" | "destructive"; reason: string; blocked: boolean }
-  | { type: "compaction"; summarized_messages: number; kept_recent: number; summary_chars?: number; status: "summarizing" | "done" | "failed"; error?: string };
+  | { type: "compaction"; summarized_messages: number; kept_recent: number; summary_chars?: number; status: "summarizing" | "done" | "failed"; error?: string }
+  | { type: "subagent_started"; task_id: string; description: string }
+  | { type: "subagent_progress"; task_id: string; status: "pending" | "running" | "completed" | "failed" }
+  | { type: "subagent_delta"; task_id: string; text: string }
+  | { type: "subagent_activity"; task_id: string; event: StreamEvent }
+  | { type: "subagent_done"; task_id: string; result?: string; error?: string };
 
 export async function streamChat(
   body: {

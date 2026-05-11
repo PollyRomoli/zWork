@@ -276,6 +276,7 @@ function ModelsPanel({
   const [apiKey, setApiKey] = useState("");
   const [revealKey, setRevealKey] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
   const [editId, setEditId] = useState<string | undefined>();
 
   const credMeta = CREDENTIAL_PLACEHOLDERS[form.credential] || CREDENTIAL_PLACEHOLDERS.openai;
@@ -314,12 +315,8 @@ function ModelsPanel({
   const submit = async () => {
     if (!form.name.trim() || !form.model_id.trim()) return;
     setBusy(true);
+    setError("");
     try {
-      // Only the per-credential API key is saved here. The per-model
-      // base URL lives on custom_models[].base_url_override and is
-      // round-tripped through onUpsert. Writing to
-      // provider_config[credential].base_url from this flow would
-      // affect every other model on the same credential.
       const patch: { api_keys?: Record<string, string> } = {};
       if (!isKeyless && apiKey.trim()) {
         patch.api_keys = { [form.credential]: apiKey.trim() };
@@ -332,6 +329,8 @@ function ModelsPanel({
       setEditId(undefined);
       setForm(EMPTY_MODEL);
       setApiKey("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err || "Failed to save model"));
     } finally {
       setBusy(false);
     }
@@ -543,6 +542,9 @@ function ModelsPanel({
                 </p>
               )}
             </Field>
+            {error && (
+              <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[12px] leading-5 text-red-700">{error}</p>
+            )}
             <div className="flex justify-end pt-1">
               <button
                 type="button"
