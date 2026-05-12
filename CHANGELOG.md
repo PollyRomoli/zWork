@@ -2,7 +2,16 @@
 
 All notable changes to zWork are documented here.
 
-## Unreleased
+## v0.3.18-beta.9
+
+**Critical regression fixes: backend stability, keychain, onboarding, plan UX.**
+
+- hardened backend watchdog: increased health-check timeout 600ms→5s, interval 10s→30s, added retry before killing to prevent mid-stream backend death
+- changed default secret store to file-based storage to avoid macOS Keychain permission prompts; file store is tried first in all modes
+- fixed Add Model flow silently failing: API errors are now surfaced in the form UI; reduced backend preflight attempts 20→6
+- removed Pro tier gate on zWork Router during onboarding so all signed-in users can select the managed router
+- wired Plan page into app routing with Stripe checkout, billing portal, and coupon code redemption UI
+- added Plan navigation link to sidebar
 
 **Advanced agent loop: subagent spawning and tool streaming.**
 
@@ -22,6 +31,8 @@ All notable changes to zWork are documented here.
 - added auto-approve destructive toggle to control permission gate
 - added permission and compaction SSE events for UI feedback
 - fixed circular import between providers.py and compaction.py
+
+## Unreleased
 
 ## v0.3.18-beta.8
 
