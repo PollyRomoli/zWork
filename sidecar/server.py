@@ -1385,6 +1385,62 @@ if _STATIC_DIR.is_dir():
         return FileResponse(_STATIC_DIR / "index.html")
 
 
+def _pid_file_path() -> Path:
+    home = os.environ.get("ZWORK_HOME", str(Path.home() / ".zwork"))
+    return Path(home) / "state" / "backend.pid"
+
+
+def _acquire_pid_lock() -> bool:
+    """Write the current PID to the lock file. Returns False if another
+    backend is already running (stale PIDs are cleaned up)."""
+    pid_path = _pid_file_path()
+    pid_path.parent.mkdir(parents=True, exist_ok=True)
+
+    if pid_path.exists():
+        try:
+            stale_pid = int(pid_path.read_text().strip())
+            if stale_pid != os.getpid():
+                try:
+                    os.kill(stale_pid, 0)
+                    # Process exists — refuse to start a second instance.
+                    print(f"Backend already running with PID {stale_pid}; refusing to start duplicate.")
+                    return False
+                except OSError:
+                    # Stale PID file — the process no longer exists.
+                    print(f"Removing stale PID lock (pid={stale_pid} is gone).")
+        except (ValueError, FileNotFoundError):
+            pass
+        pid_path.unlink(missing_ok=True)
+
+    pid_path.write_text(str(os.getpid()))
+    return True
+
+
+def _release_pid_lock() -> None:
+    pid_path = _pid_file_path()
+    try:
+        if pid_path.exists() and int(pid_path.read_text().strip()) == os.getpid():
+            pid_path.unlink()
+    except Exception:
+        pass
+
+
+def _setup_signal_handlers() -> None:
+    import signal as _signal
+
+    def _on_term(signum: int, frame: Any) -> None:
+        print(f"zWork backend received signal {signum}, shutting down...")
+        _release_pid_lock()
+        # Kill any active child process groups spawned by this backend.
+        with contextlib.suppress(Exception):
+            os.killpg(0, _signal.SIGTERM)
+        _signal.signal(signum, _signal.SIG_DFL)
+        os.kill(os.getpid(), signum)
+
+    _signal.signal(_signal.SIGTERM, _on_term)
+    _signal.signal(_signal.SIGINT, _on_term)
+
+
 def main() -> None:
     import uvicorn
 
@@ -1404,8 +1460,24 @@ def main() -> None:
 
     host = os.environ.get("ZWORK_HOST", "127.0.0.1")
     port = int(os.environ.get("ZWORK_PORT", "8787"))
-    print(f"zWork web app -> http://{host}:{port}")
-    uvicorn.run(app, host=host, port=port, log_level="info")
+
+    if not _acquire_pid_lock():
+        sys.exit(1)
+
+    _setup_signal_handlers()
+
+    print(f"zWork web app -> http://{host}:{port} (pid={os.getpid()})")
+    try:
+        uvicorn.run(
+            app,
+            host=host,
+            port=port,
+            log_level="info",
+            limit_max_requests=500,
+            timeout_graceful_shutdown=10,
+        )
+    finally:
+        _release_pid_lock()
 
 
 if __name__ == "__main__":

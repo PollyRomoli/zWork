@@ -934,11 +934,28 @@ def _cap_text(text: str, metadata: dict[str, Any]) -> str:
     return text
 
 
+_MAX_PDF_FILE_MB = 100
+_MAX_PDF_PAGES = 500
+_MAX_TABLE_PAGES = 50
+
+
 def _extract_pdf(p: Path, fmt: str, pages: str | None) -> dict[str, Any]:
     import pypdf
 
+    fsize_mb = p.stat().st_size / (1024 * 1024)
+    if fsize_mb > _MAX_PDF_FILE_MB:
+        raise ValueError(
+            f"PDF is {fsize_mb:.0f} MB, exceeds the {_MAX_PDF_FILE_MB} MB limit. "
+            "Split the file or extract specific pages."
+        )
+
     reader = pypdf.PdfReader(str(p))
     total = len(reader.pages)
+    if total > _MAX_PDF_PAGES:
+        raise ValueError(
+            f"PDF has {total} pages, exceeds the {_MAX_PDF_PAGES} page limit. "
+            "Use the 'pages' parameter to extract a subset (e.g. '1-50')."
+        )
     indices = _parse_page_range(pages, total) if pages else list(range(total))
 
     metadata: dict[str, Any] = {}
@@ -967,25 +984,32 @@ def _extract_pdf(p: Path, fmt: str, pages: str | None) -> dict[str, Any]:
     tables: list[dict[str, Any]] = []
     # pdfplumber is heavier than pypdf, only spin it up when tables are
     # actually requested (markdown output) and the doc isn't likely scanned.
+    # Cap table extraction at _MAX_TABLE_PAGES to avoid OOM on huge PDFs.
     if fmt == "markdown" and not metadata.get("likely_scanned"):
-        try:
-            import pdfplumber
+        if len(indices) <= _MAX_TABLE_PAGES:
+            try:
+                import pdfplumber
 
-            with pdfplumber.open(str(p)) as pdf:
-                for idx in indices:
-                    if idx >= len(pdf.pages):
-                        continue
-                    for raw in pdf.pages[idx].extract_tables() or []:
-                        if not raw:
+                with pdfplumber.open(str(p)) as pdf:
+                    for idx in indices:
+                        if idx >= len(pdf.pages):
                             continue
-                        tables.append({
-                            "page": idx + 1,
-                            "rows": [[("" if c is None else str(c)) for c in row] for row in raw],
-                        })
-        except Exception:
-            # Table extraction is best-effort; never fail the whole call
-            # because pdfplumber choked on a malformed table.
-            pass
+                        for raw in pdf.pages[idx].extract_tables() or []:
+                            if not raw:
+                                continue
+                            tables.append({
+                                "page": idx + 1,
+                                "rows": [[("" if c is None else str(c)) for c in row] for row in raw],
+                            })
+            except Exception:
+                # Table extraction is best-effort; never fail the whole call
+                # because pdfplumber choked on a malformed table.
+                pass
+        else:
+            metadata["tables_skipped"] = (
+                f"Table extraction skipped: {len(indices)} pages exceeds "
+                f"the {_MAX_TABLE_PAGES}-page limit for table extraction."
+            )
 
     text = _cap_text(text, metadata)
     return {

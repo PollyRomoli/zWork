@@ -340,7 +340,7 @@ export function ChatInput({ placeholder = "Send a message", autoFocus, onSend }:
       )}
     >
       {attachments.length > 0 && (
-        <div className="flex flex-wrap gap-2 border-b border-line px-4 pt-3">
+        <div className="flex flex-wrap gap-2 px-4 pt-3">
           {attachments.map((a) => (
             <div
               key={a.id}

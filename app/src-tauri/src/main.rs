@@ -328,7 +328,29 @@ fn start_dev_backend() -> Option<BackendChild> {
     }
 }
 
+fn kill_stale_on_port(port: u16) {
+    let port_str = port.to_string();
+    // Kill any process already bound to the backend port. This handles stale
+    // instances left behind by a previous run or by an external launcher.
+    let mut cmd = if cfg!(target_os = "linux") {
+        let mut c = Command::new("fuser");
+        c.arg("-k").arg(format!("{}/tcp", port_str));
+        c
+    } else {
+        // macOS / BSD: lsof -ti :PORT | xargs kill -9
+        let mut c = Command::new("sh");
+        c.arg("-c")
+            .arg(format!("lsof -ti :{} 2>/dev/null | xargs kill -9 2>/dev/null; true", port_str));
+        c
+    };
+    cmd.stdout(Stdio::null()).stderr(Stdio::null());
+    let _ = cmd.spawn().and_then(|mut child| child.wait());
+    // Brief pause so the kernel releases the port before we bind.
+    std::thread::sleep(Duration::from_millis(300));
+}
+
 fn spawn_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
+    kill_stale_on_port(8787);
     if let Some(child) = start_packaged_backend(app) {
         return Some(child);
     }
