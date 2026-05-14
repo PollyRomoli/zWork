@@ -53,9 +53,26 @@ case "$OS" in
     rm -f "$install_path"
     cp "$download_path" "$install_path"
     chmod +x "$install_path"
-    ln -sf "$install_path" "$BIN_DIR/zwork"
-    echo "Installed to $install_path"
-    echo "Symlinked $BIN_DIR/zwork"
+
+    # Extract the AppImage and remove bundled shared libraries.
+    # The AppImage bundles Ubuntu-built .so files that are ABI-incompatible
+    # with other distros (Arch, Fedora, etc.), causing EGL_BAD_PARAMETER crashes.
+    # After extraction, the dynamic linker resolves everything from the host system.
+    extract_dir="$INSTALL_ROOT/extracted"
+    rm -rf "$extract_dir"
+    (cd "$tmp_dir" && "$install_path" --appimage-extract >/dev/null 2>&1)
+    mv "$tmp_dir/squashfs-root" "$extract_dir"
+    find "$extract_dir/usr/lib" -name '*.so.*' -not -type l -delete 2>/dev/null || true
+    find "$extract_dir/usr/lib" -type d -empty -delete 2>/dev/null || true
+
+    # Create launcher pointing to the extracted version
+    cat > "$BIN_DIR/zwork" << WRAPPER
+#!/bin/bash
+exec $extract_dir/AppRun "\$@"
+WRAPPER
+    chmod +x "$BIN_DIR/zwork"
+    echo "Installed to $extract_dir"
+    echo "Launcher at $BIN_DIR/zwork"
     ;;
   darwin)
     mount_point="$tmp_dir/mount"
