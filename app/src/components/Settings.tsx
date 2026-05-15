@@ -1266,7 +1266,14 @@ function PlanPanel() {
               </div>
             </div>
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken">
+          <div
+            className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken"
+            role="progressbar"
+            aria-valuenow={remaining5h}
+            aria-valuemin={0}
+            aria-valuemax={summary?.five_hour_limit || 0}
+            aria-label={`5-hour limit: ${remaining5h} remaining of ${summary?.five_hour_limit || 0}`}
+          >
             <div
               className="h-full rounded-full bg-ink/70 transition-all duration-500"
               style={{ width: `${percent5h}%` }}
@@ -1297,7 +1304,14 @@ function PlanPanel() {
               </div>
             </div>
           </div>
-          <div className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken">
+          <div
+            className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken"
+            role="progressbar"
+            aria-valuenow={remainingWeek}
+            aria-valuemin={0}
+            aria-valuemax={summary?.weekly_limit || 0}
+            aria-label={`Weekly limit: ${remainingWeek} remaining of ${summary?.weekly_limit || 0}`}
+          >
             <div
               className="h-full rounded-full bg-ink/70 transition-all duration-500"
               style={{ width: `${percentWeek}%` }}

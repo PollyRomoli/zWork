@@ -8,6 +8,7 @@ import { ProjectView } from "./ProjectView";
 import { ArtifactPanel } from "./ArtifactPanel";
 import { SearchModal } from "./SearchModal";
 import { AnalyticsPage } from "./AnalyticsPage";
+import { PlanPage } from "./PlanPage";
 import { LoginScreen } from "./LoginScreen";
 import { Onboarding } from "./Onboarding";
 import { useApp } from "../lib/store";
@@ -19,6 +20,15 @@ const PREVIEW_USER = {
   name: "Preview",
   tier: "free" as const,
   coupon_code: null,
+};
+
+const PREVIEW_CLOUD_USER = {
+  user_id: "preview-user",
+  email: "preview@zwork.local",
+  name: "Preview",
+  tier: "free" as const,
+  created_at: new Date().toISOString(),
+  updated_at: new Date().toISOString(),
 };
 
 export function PreviewAuthShell() {
@@ -107,6 +117,8 @@ export function PreviewAppShell() {
             <SettingsPage />
           ) : view === "analytics" ? (
             <AnalyticsPage />
+          ) : view === "plan" ? (
+            <PlanPage cloudUser={PREVIEW_CLOUD_USER} />
           ) : view === "projects" ? (
             <ProjectView />
           ) : (

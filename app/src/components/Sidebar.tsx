@@ -63,7 +63,7 @@ export function Sidebar() {
       {/* Top row: logo (top-left, icon only) + optional "zWork" wordmark + collapse toggle */}
       <div
         className={cn(
-          "flex shrink-0 items-center px-2 pt-0 pb-1",
+          "flex shrink-0 items-center px-2 pt-3 pb-1",
           open ? "justify-between" : "justify-center",
         )}
       >
