@@ -53,7 +53,7 @@ This script:
 cd app && npm run dev
 
 # Sidecar dev server with hot reload
-cd sidecar && source .venv/bin/activate && uvicorn main:app --reload
+cd sidecar && source .venv/bin/activate && uvicorn sidecar.server:app --reload
 
 # Full desktop build
 npm run tauri build
@@ -94,7 +94,7 @@ When reporting bugs, please include:
 1. Fork the repository
 2. Create a branch for your feature (`git checkout -b feature/amazing-feature`)
 3. Write tests for new functionality
-4. Ensure all tests pass (`npm test` && `pytest`)
+4. Ensure all tests pass (`npm test` && `pytest tests/`)
 5. Submit a pull request with a clear description
 
 ### Code Style
@@ -110,7 +110,7 @@ When reporting bugs, please include:
 cd app && npm test
 
 # Python backend tests
-cd sidecar && pytest
+pytest tests/
 
 # End-to-end tests
 cd tests && pytest e2e/

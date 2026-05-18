@@ -36,7 +36,7 @@ def _claude_code() -> Integration:
     reuse = False
     if settings.exists():
         try:
-            data = json.loads(settings.read_text())
+            data = json.loads(settings.read_text(encoding="utf-8"))
             env = data.get("env") or {}
             if env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_API_KEY"):
                 reuse = True

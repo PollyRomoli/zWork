@@ -20,6 +20,7 @@ import {
   X,
   FileText,
   Image as ImageIcon,
+  Upload,
 } from "lucide-react";
 import { cn } from "../lib/cn";
 import { useApp } from "../lib/store";
@@ -60,6 +61,8 @@ export function ChatInput({ placeholder = "Send a message", autoFocus, onSend }:
   const [attachments, setAttachments] = useState<ComposerAttachment[]>([]);
   const [uploading, setUploading] = useState(false);
   const [composing, setComposing] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const dragCounter = useRef(0);
   const [templates, setTemplates] = useState<PromptTemplate[]>(() => loadTemplates());
   const [slashState, setSlashState] = useState<
     { start: number; end: number; query: string } | null
@@ -265,6 +268,9 @@ export function ChatInput({ placeholder = "Send a message", autoFocus, onSend }:
       return;
     }
     setValue("");
+    for (const a of attachments) {
+      if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+    }
     setAttachments([]);
     setSlashState(null);
     onSend?.(text);
@@ -333,11 +339,62 @@ export function ChatInput({ placeholder = "Send a message", autoFocus, onSend }:
   };
 
   return (
-    <div
+    <>
+      {/* Full-viewport drop overlay when dragging files */}
+      {dragOver && (
+        <div
+          className="fixed inset-0 z-[500] flex items-center justify-center bg-ink/10 backdrop-blur-sm animate-fade-in"
+          onDragLeave={(e) => {
+            e.preventDefault();
+            dragCounter.current -= 1;
+            if (dragCounter.current <= 0) setDragOver(false);
+          }}
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            setDragOver(false);
+            dragCounter.current = 0;
+            if (e.dataTransfer.files.length > 0) void uploadFiles(e.dataTransfer.files);
+          }}
+          role="dialog"
+          aria-label="Drop files to attach"
+        >
+          <div className="flex flex-col items-center gap-4 rounded-2xl border-2 border-dashed border-ink/30 bg-paper p-12 shadow-pop pointer-events-none">
+            <Upload className="h-10 w-10 text-ink-muted" />
+            <div className="text-center">
+              <p className="text-[18px] font-medium text-ink">Drop files to attach</p>
+              <p className="mt-1 text-[13px] text-ink-muted">Images, documents, code, and more</p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div
       className={cn(
         "group relative w-full rounded-2xl border border-line bg-paper-raised transition-[border-color,box-shadow]",
         focused ? "border-line-strong shadow-pop" : "shadow-chat",
+        dragOver && "border-ink/30 border-dashed",
       )}
+      onDragEnter={(e) => {
+        e.preventDefault();
+        dragCounter.current += 1;
+        if (dragCounter.current === 1) setDragOver(true);
+      }}
+      onDragOver={(e) => e.preventDefault()}
+      onDragLeave={(e) => {
+        e.preventDefault();
+        dragCounter.current -= 1;
+        if (dragCounter.current <= 0) {
+          dragCounter.current = 0;
+          setDragOver(false);
+        }
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        setDragOver(false);
+        dragCounter.current = 0;
+        if (e.dataTransfer.files.length > 0) void uploadFiles(e.dataTransfer.files);
+      }}
     >
       {attachments.length > 0 && (
         <div className="flex flex-wrap gap-2 px-4 pt-3">
@@ -354,7 +411,10 @@ export function ChatInput({ placeholder = "Send a message", autoFocus, onSend }:
               <span className="max-w-[180px] truncate">{a.name}</span>
               <button
                 type="button"
-                onClick={() => setAttachments((prev) => prev.filter((x) => x.id !== a.id))}
+                onClick={() => {
+                  if (a.previewUrl) URL.revokeObjectURL(a.previewUrl);
+                  setAttachments((prev) => prev.filter((x) => x.id !== a.id));
+                }}
                 className="rounded-full p-0.5 text-ink-faint hover:bg-line/60 hover:text-ink"
                 aria-label={`Remove ${a.name}`}
               >
@@ -501,5 +561,6 @@ export function ChatInput({ placeholder = "Send a message", autoFocus, onSend }:
         accept="image/*,.txt,.md,.markdown,.csv,.tsv,.json,.yaml,.yml,.py,.js,.jsx,.ts,.tsx,.html,.css,.xml,.svg,.pdf"
       />
     </div>
+    </>
   );
 }

@@ -7,17 +7,7 @@ import { useResolvedTheme } from "../lib/theme";
 import { useApp } from "../lib/store";
 import { cn } from "../lib/cn";
 import { isMacOS } from "../lib/platform";
-// Email auth disabled for now
-// import { startDesktopEmailSignIn, startDesktopEmailSignUp } from "../lib/cloud";
-
-const ROTATING_WORDS = [
-  "deep work",
-  "getting unstuck",
-  "shipping faster",
-  "clear thinking",
-  "brainstorming",
-  "side projects",
-];
+import { ROTATING_WORDS } from "../lib/constants";
 
 function LeftVisual() {
   const [index, setIndex] = useState(0);

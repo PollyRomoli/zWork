@@ -2,7 +2,6 @@ import { invoke } from "@tauri-apps/api/core";
 
 const CLOUD_BASE = "https://api.tryzwork.app";
 const TOKEN_KEY = "zwork:cloud-token";
-const MANAGED_BACKUP_KEY = "zwork:managed-backup";
 const AUTH_CHANGED_EVENT = "zwork:cloud-auth-changed";
 
 class CloudFetchError extends Error {
@@ -19,7 +18,7 @@ export interface CloudUser {
   user_id: string;
   email: string;
   name: string;
-  tier: "free" | "pro";
+  tier: "free" | "pro" | "max";
   access_code?: string | null;
   coupon_code?: string | null;
   stripe_customer_id?: string | null;
@@ -148,32 +147,6 @@ export function onCloudAuthChanged(listener: () => void) {
   };
 }
 
-export function getManagedBackup(): {
-  apiKey?: string;
-  baseUrl?: string;
-  defaultModel?: string;
-} | null {
-  try {
-    const raw = window.localStorage.getItem(MANAGED_BACKUP_KEY);
-    if (!raw) return null;
-    return JSON.parse(raw) as { apiKey?: string; baseUrl?: string; defaultModel?: string };
-  } catch {
-    return null;
-  }
-}
-
-export function saveManagedBackup(payload: {
-  apiKey?: string;
-  baseUrl?: string;
-  defaultModel?: string;
-}) {
-  window.localStorage.setItem(MANAGED_BACKUP_KEY, JSON.stringify(payload));
-}
-
-export function clearManagedBackup() {
-  window.localStorage.removeItem(MANAGED_BACKUP_KEY);
-}
-
 async function cloudFetch<T>(path: string, init?: RequestInit, token = getToken()): Promise<T> {
   const headers = new Headers(init?.headers || {});
   if (token) headers.set("authorization", `Bearer ${token}`);
@@ -283,6 +256,3 @@ export async function createBillingPortalSession() {
   });
 }
 
-export async function openExternalCloudUrl(url: string) {
-  await invoke("open_external", { url });
-}

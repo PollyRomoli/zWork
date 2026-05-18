@@ -15,7 +15,6 @@ import os
 import re
 import sys
 import subprocess
-import shlex
 import signal
 import urllib.parse
 import xml.etree.ElementTree as ET
@@ -1222,8 +1221,3 @@ def parse_tool_calls(text: str) -> list[dict[str, Any]]:
         except (json.JSONDecodeError, KeyError):
             continue
     return calls
-
-
-# silence linters on unused import
-_ = shlex
-_ = os

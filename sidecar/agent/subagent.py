@@ -99,7 +99,7 @@ class SubagentSpawner:
         async def run_subagent():
             try:
                 task.status = "running"
-                task.started_at = asyncio.get_event_loop().time()
+                task.started_at = asyncio.get_running_loop().time()
                 yield {
                     "type": "subagent_progress",
                     "task_id": task_id,
@@ -154,7 +154,7 @@ class SubagentSpawner:
                 result = "".join(full_result)
                 task.status = "completed"
                 task.result = result
-                task.completed_at = asyncio.get_event_loop().time()
+                task.completed_at = asyncio.get_running_loop().time()
 
                 await result_queue.put({
                     "type": "subagent_done",
@@ -165,7 +165,7 @@ class SubagentSpawner:
             except Exception as e:
                 task.status = "failed"
                 task.error = str(e)
-                task.completed_at = asyncio.get_event_loop().time()
+                task.completed_at = asyncio.get_running_loop().time()
                 await result_queue.put({
                     "type": "subagent_done",
                     "task_id": task_id,

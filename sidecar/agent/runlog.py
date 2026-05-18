@@ -1,15 +1,11 @@
 from __future__ import annotations
 
 import json
-import time
 from pathlib import Path
 from typing import Any
 
 from .home import runs_dir
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
+from .utils import now_ms
 
 
 def _path(run_id: str) -> Path:
@@ -31,7 +27,7 @@ def _sanitize(value: Any) -> Any:
 
 def append(run_id: str, event: str, **fields: Any) -> None:
     payload = {
-        "ts": _now_ms(),
+        "ts": now_ms(),
         "event": event,
         **{k: _sanitize(v) for k, v in fields.items()},
     }

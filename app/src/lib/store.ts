@@ -285,7 +285,7 @@ export interface User {
   email: string;
   name: string;
   picture?: string;
-  tier?: "free" | "pro";
+  tier?: "free" | "pro" | "max";
   coupon_code?: string | null;
 }
 
@@ -582,7 +582,7 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const { projects } = await api.listProjects();
       set({ projects });
-    } catch { /* ignore */ }
+    } catch (e) { console.warn("refreshProjects failed:", e) }
   },
 
   createProject: async (name, description) => {
@@ -604,7 +604,7 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const { content } = await api.getMemory();
       set({ memoryContent: content });
-    } catch { /* ignore */ }
+    } catch (e) { console.warn("refreshMemory failed:", e) }
   },
 
   saveMemory: async (content) => {
@@ -616,7 +616,7 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const { content } = await api.getUserMd();
       set({ userMdContent: content });
-    } catch { /* ignore */ }
+    } catch (e) { console.warn("refreshUserMd failed:", e) }
   },
 
   saveUserMd: async (content) => {
@@ -641,7 +641,7 @@ export const useApp = create<AppState>((set, get) => ({
           },
         });
       }
-    } catch { /* ignore */ }
+    } catch (e) { console.warn("bootstrap cloud sync failed:", e) }
 
     await Promise.all([
       get().refreshProviders(),
@@ -671,18 +671,14 @@ export const useApp = create<AppState>((set, get) => ({
     try {
       const { chats } = await api.listChats();
       set({ chatSummaries: chats });
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { console.warn("refreshChats failed:", e) }
   },
 
   refreshProviders: async () => {
     try {
       const p = await api.providers();
       set((s) => ({ providers: p, model: pickAvailableModel(p, s.model) }));
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { console.warn("refreshProviders failed:", e) }
   },
 
   refreshSettings: async () => {
@@ -693,27 +689,21 @@ export const useApp = create<AppState>((set, get) => ({
       }
       set({ settings: s });
       setTelemetryEnabled(!!s.telemetry_enabled);
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { console.warn("refreshSettings failed:", e) }
   },
 
   refreshIntegrations: async () => {
     try {
       const { integrations } = await api.integrations();
       set({ integrations });
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { console.warn("refreshIntegrations failed:", e) }
   },
 
   refreshMe: async () => {
     try {
       const me = await api.me();
       set({ me });
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { console.warn("refreshMe failed:", e) }
   },
 
   openLanding: () => set({ activeChatId: null, view: "chat" }),
@@ -734,7 +724,22 @@ export const useApp = create<AppState>((set, get) => ({
             activities: m.activities || [],
           }));
         const latestActivities = [...messages].reverse().find((m) => m.role === "assistant" && (m.activities || []).length > 0)?.activities || [];
+        // Extract artifacts from loaded messages so they appear in the
+        // artifact panel after app restart — otherwise raw [[ARTIFACT...]]
+        // tags leak into the displayed text.
+        const loadedArtifacts: Artifact[] = [];
+        for (let i = 0; i < messages.length; i++) {
+          const m = messages[i];
+          if (m.role === "assistant" && m.content.includes("[[ARTIFACT")) {
+            const { cleaned, artifacts } = extractArtifacts(m.content, m.id);
+            if (artifacts.length > 0) {
+              messages[i] = { ...m, content: cleaned || (artifacts.length === 1 ? "Here's the artifact:" : "Here are the artifacts:") };
+              loadedArtifacts.push(...artifacts);
+            }
+          }
+        }
         set((s) => ({
+          artifacts: [...s.artifacts, ...loadedArtifacts],
           chats: {
             ...s.chats,
             [id]: {
@@ -771,9 +776,7 @@ export const useApp = create<AppState>((set, get) => ({
   deleteChat: async (id) => {
     try {
       await api.deleteChat(id);
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { console.warn("deleteChat failed:", e) }
     set((s) => {
       const { [id]: _, ...rest } = s.chats;
       void _;
@@ -788,9 +791,7 @@ export const useApp = create<AppState>((set, get) => ({
   renameChat: async (id, title) => {
     try {
       await api.renameChat(id, title);
-    } catch {
-      /* ignore */
-    }
+    } catch (e) { console.warn("renameChat failed:", e) }
     set((s) => {
       const c = s.chats[id];
       if (!c) return s;

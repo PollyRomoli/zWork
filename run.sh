@@ -27,6 +27,8 @@ for port in 8787 1420; do
   pids=$(lsof -ti ":${port}" 2>/dev/null || true)
   if [[ -n "${pids}" ]]; then
     echo "Killing stale process(es) on port ${port}: ${pids}"
+    kill -TERM ${pids} 2>/dev/null || true
+    sleep 0.5
     kill -9 ${pids} 2>/dev/null || true
   fi
 done
@@ -55,4 +57,10 @@ done
 # ---- Launch Tauri dev (opens the native window) ----
 echo "Opening zWork desktop window ..."
 cd app
+# On Linux with system WebKitGTK, skip the software-rendering fallback that
+# causes 75-90% CPU usage in WebKitWebProcess. The bundled Ubuntu libs are
+# incompatible with other distros' Mesa/EGL stacks.
+if [[ "$(uname -s)" == "Linux" ]]; then
+  export ZWORK_SYSTEM_WEBKIT=1
+fi
 npx tauri dev

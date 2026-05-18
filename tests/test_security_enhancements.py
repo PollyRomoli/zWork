@@ -23,13 +23,13 @@ class TestSecurityEnhancements(unittest.TestCase):
 
     def test_ollama_models_endpoint_ssrf_protection(self):
         # Safe URL
-        response = self.client.get("/api/ollama/models?base_url=https://ollama.com/v1")
+        response = self.client.post("/api/ollama/models", json={"base_url": "https://ollama.com/v1"})
         # We don't care about the actual result (it might 404 or 500 because it's a real request),
         # but it shouldn't be 400 "unauthorized ollama base_url"
         self.assertNotEqual(response.status_code, 400)
 
         # Unsafe URL
-        response = self.client.get("/api/ollama/models?base_url=https://evil.com/v1")
+        response = self.client.post("/api/ollama/models", json={"base_url": "https://evil.com/v1"})
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["detail"], "unauthorized ollama base_url")
 

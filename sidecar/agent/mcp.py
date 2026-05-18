@@ -110,7 +110,7 @@ class _Session:
             await asyncio.wait_for(self.ready.wait(), timeout=10.0)
         if self.error:
             return {"isError": True, "content": [{"type": "text", "text": self.error}]}
-        future: asyncio.Future = asyncio.get_event_loop().create_future()
+        future: asyncio.Future = asyncio.get_running_loop().create_future()
         await self._queue.put(("__call__", tool_name, (args, future)))
         return await asyncio.wait_for(future, timeout=120.0)
 

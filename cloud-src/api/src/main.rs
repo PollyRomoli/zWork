@@ -8,7 +8,7 @@ use axum::{
 };
 use chrono::{DateTime, Duration, NaiveDate, Utc};
 use hmac::{Hmac, Mac};
-use reqwest::Client;
+use reqwest::{Client, Url};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use sha2::Sha256;
@@ -31,8 +31,8 @@ struct AppState {
     stripe_webhook_secret: String,
     db: PgPool,
     http_client: Client,
-    auth_session_url: String,
-    auth_internal_base: String,
+    auth_session_url: Url,
+    auth_internal_base: Url,
     auth_public_base: String,
     google_client_id: String,
     google_client_secret: String,
@@ -58,6 +58,11 @@ struct GatewayConfig {
     weekly_limit_multiplier: i64,
     max_concurrent_roots: i64,
     dev_coupon_codes: Vec<String>,
+    /// Total root requests available to ALL free users combined per 5 hours.
+    /// Each free user gets an equal share: pool / active_free_users (floor 5).
+    free_tier_pool_5h: i64,
+    pro_root_requests_per_5h: i64,
+    max_root_requests_per_5h: i64,
 }
 
 #[derive(Clone)]
@@ -88,6 +93,69 @@ fn env_bool(key: &str, default: bool) -> bool {
         ),
         Err(_) => default,
     }
+}
+
+fn validate_internal_service_url(url: &Url, key: &str) {
+    if !matches!(url.scheme(), "http" | "https") {
+        panic!("{key} must use http or https");
+    }
+    if url.host_str().is_none() {
+        panic!("{key} must include a host");
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        panic!("{key} must not include URL credentials");
+    }
+    if url.query().is_some() || url.fragment().is_some() {
+        panic!("{key} must not include query params or fragments");
+    }
+}
+
+fn normalize_auth_base_path(mut url: Url) -> Url {
+    let trimmed = url.path().trim_end_matches('/');
+    let normalized = if trimmed.is_empty() {
+        "/".to_string()
+    } else {
+        format!("{trimmed}/")
+    };
+    url.set_path(&normalized);
+    url
+}
+
+fn load_auth_internal_base() -> Url {
+    let raw = std::env::var("AUTH_INTERNAL_BASE")
+        .unwrap_or_else(|_| "http://better_auth:3000/api/auth".to_string());
+    let parsed = Url::parse(&raw).unwrap_or_else(|err| {
+        panic!("AUTH_INTERNAL_BASE must be a valid absolute URL: {err}");
+    });
+    validate_internal_service_url(&parsed, "AUTH_INTERNAL_BASE");
+    normalize_auth_base_path(parsed)
+}
+
+fn load_auth_session_url(auth_internal_base: &Url) -> Url {
+    let default_session_url = auth_internal_base
+        .join("get-session")
+        .expect("AUTH_INTERNAL_BASE must allow appending get-session");
+    let raw = std::env::var("AUTH_SESSION_URL").unwrap_or_else(|_| default_session_url.to_string());
+    let parsed = Url::parse(&raw).unwrap_or_else(|err| {
+        panic!("AUTH_SESSION_URL must be a valid absolute URL: {err}");
+    });
+    validate_internal_service_url(&parsed, "AUTH_SESSION_URL");
+    if parsed.scheme() != auth_internal_base.scheme()
+        || parsed.host_str() != auth_internal_base.host_str()
+        || parsed.port_or_known_default() != auth_internal_base.port_or_known_default()
+    {
+        panic!("AUTH_SESSION_URL must share scheme/host/port with AUTH_INTERNAL_BASE");
+    }
+    if parsed.path() != default_session_url.path() {
+        panic!("AUTH_SESSION_URL path must match AUTH_INTERNAL_BASE + /get-session");
+    }
+    parsed
+}
+
+fn auth_endpoint_url(auth_internal_base: &Url, endpoint: &str) -> Url {
+    auth_internal_base
+        .join(endpoint)
+        .unwrap_or_else(|_| panic!("failed to build auth endpoint URL: {endpoint}"))
 }
 
 fn load_gateway_providers() -> Vec<GatewayProvider> {
@@ -694,7 +762,7 @@ async fn session_user_from_cookie(state: &AppState, headers: &HeaderMap) -> Opti
 
     let response = state
         .http_client
-        .get(&state.auth_session_url)
+        .get(state.auth_session_url.clone())
         .header(reqwest::header::COOKIE, cookie)
         .send()
         .await
@@ -912,9 +980,9 @@ async fn better_auth_sign_in_email(
 ) -> Result<BetterAuthUser, (StatusCode, String)> {
     let response = state
         .http_client
-        .post(format!(
-            "{}/sign-in/email",
-            state.auth_internal_base.trim_end_matches('/')
+        .post(auth_endpoint_url(
+            &state.auth_internal_base,
+            "sign-in/email",
         ))
         .json(&serde_json::json!({
             "email": email,
@@ -944,7 +1012,7 @@ async fn better_auth_sign_in_email(
 
     let session_response = state
         .http_client
-        .get(&state.auth_session_url)
+        .get(state.auth_session_url.clone())
         .header(reqwest::header::COOKIE, cookie)
         .send()
         .await
@@ -990,9 +1058,9 @@ async fn better_auth_sign_up_email(
 
     let response = state
         .http_client
-        .post(format!(
-            "{}/sign-up/email",
-            state.auth_internal_base.trim_end_matches('/')
+        .post(auth_endpoint_url(
+            &state.auth_internal_base,
+            "sign-up/email",
         ))
         .json(&payload)
         .send()
@@ -1014,7 +1082,49 @@ async fn better_auth_sign_up_email(
     }
 }
 
-async fn enforce_root_rate_limit(state: &AppState, user_id: &str) -> Result<(), StatusCode> {
+/// Resolve the 5-hour root-request limit for a user, applying dynamic
+/// free-tier pooling when the user is on the free plan.
+///
+/// Free users share a fixed pool (`free_tier_pool_5h`). Each active free
+/// user gets an equal slice: pool / active_free_users (floor 5).
+///
+/// Pro and Max users have fixed limits unaffected by the pool.
+async fn resolve_user_5h_limit(state: &AppState, tier: &str) -> i64 {
+    match tier {
+        "pro" => state.gateway.pro_root_requests_per_5h,
+        "max" => state.gateway.max_root_requests_per_5h,
+        _ => {
+            if state.gateway.free_tier_pool_5h <= 0 {
+                state.gateway.root_requests_per_5h
+            } else {
+                let active_free: i64 = sqlx::query_scalar(
+                    r#"
+                    SELECT COUNT(DISTINCT user_id)
+                    FROM (
+                        SELECT gr.user_id
+                        FROM gateway_requests gr
+                        JOIN app_users au ON au.user_id = gr.user_id
+                        WHERE au.tier = 'free'
+                          AND gr.request_kind = 'root'
+                          AND gr.created_at >= NOW() - INTERVAL '5 hours'
+                        GROUP BY gr.user_id
+                    ) sub
+                    "#,
+                )
+                .fetch_one(&state.db)
+                .await
+                .unwrap_or(1)
+                .max(1);
+                (state.gateway.free_tier_pool_5h / active_free).max(5)
+            }
+        }
+    }
+}
+
+/// Enforce rate limits with dynamic free-tier pooling.
+async fn enforce_root_rate_limit(state: &AppState, user_id: &str, tier: &str) -> Result<(), StatusCode> {
+    let limit_5h = resolve_user_5h_limit(state, tier).await;
+
     let used_last_5h: i64 = sqlx::query_scalar(
         r#"
         SELECT COUNT(*)
@@ -1029,12 +1139,11 @@ async fn enforce_root_rate_limit(state: &AppState, user_id: &str) -> Result<(), 
     .await
     .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
 
-    if used_last_5h >= state.gateway.root_requests_per_5h {
+    if used_last_5h >= limit_5h {
         return Err(StatusCode::TOO_MANY_REQUESTS);
     }
 
-    let weekly_limit =
-        state.gateway.root_requests_per_5h * state.gateway.weekly_limit_multiplier.max(1);
+    let weekly_limit = limit_5h * state.gateway.weekly_limit_multiplier.max(1);
     let used_last_7d: i64 = sqlx::query_scalar(
         r#"
         SELECT COUNT(*)
@@ -1318,7 +1427,7 @@ async fn ai_proxy(
         .map_err(|status| (status, "gateway_user_resolution_failed".to_string()))?;
 
     if let (Some(user), RequestKind::Root) = (&app_user, request_kind) {
-        enforce_root_rate_limit(&state, &user.user_id)
+        enforce_root_rate_limit(&state, &user.user_id, &user.tier)
             .await
             .map_err(|status| {
                 let message = match status {
@@ -1525,7 +1634,7 @@ async fn ai_proxy_anthropic(
         .map_err(|status| (status, "gateway_user_resolution_failed".to_string()))?;
 
     if let (Some(user), RequestKind::Root) = (&app_user, request_kind) {
-        enforce_root_rate_limit(&state, &user.user_id)
+        enforce_root_rate_limit(&state, &user.user_id, &user.tier)
             .await
             .map_err(|status| {
                 let message = match status {
@@ -3140,9 +3249,8 @@ async fn analytics_summary(
         "Stripe billing is not configured yet. Set the Stripe secret and Pro price IDs on the server.".to_string()
     };
 
-    let five_hour_limit = state.gateway.root_requests_per_5h;
-    let weekly_limit =
-        state.gateway.root_requests_per_5h * state.gateway.weekly_limit_multiplier.max(1);
+    let five_hour_limit = resolve_user_5h_limit(&state, &user.tier).await;
+    let weekly_limit = five_hour_limit * state.gateway.weekly_limit_multiplier.max(1);
     let mut owner_provider_overview = Vec::new();
 
     if is_owner_email(&state, &user.email) {
@@ -3255,6 +3363,9 @@ async fn main() {
         .await
         .expect("Failed to bootstrap Postgres schema");
 
+    let auth_internal_base = load_auth_internal_base();
+    let auth_session_url = load_auth_session_url(&auth_internal_base);
+
     let state = AppState {
         posthog_client: Client::new(),
         posthog_key: std::env::var("POSTHOG_API_KEY").unwrap_or_default(),
@@ -3264,10 +3375,8 @@ async fn main() {
         stripe_webhook_secret: std::env::var("STRIPE_WEBHOOK_SECRET").unwrap_or_default(),
         db: pool,
         http_client: Client::new(),
-        auth_session_url: std::env::var("AUTH_SESSION_URL")
-            .unwrap_or_else(|_| "http://better_auth:3000/api/auth/get-session".to_string()),
-        auth_internal_base: std::env::var("AUTH_INTERNAL_BASE")
-            .unwrap_or_else(|_| "http://better_auth:3000/api/auth".to_string()),
+        auth_session_url,
+        auth_internal_base,
         auth_public_base: std::env::var("AUTH_PUBLIC_BASE")
             .unwrap_or_else(|_| "https://api.tryzwork.app/api/auth".to_string()),
         google_client_id: std::env::var("GOOGLE_CLIENT_ID").unwrap_or_default(),
@@ -3301,6 +3410,18 @@ async fn main() {
                 .ok()
                 .and_then(|v| v.parse::<i64>().ok())
                 .unwrap_or(3),
+            free_tier_pool_5h: std::env::var("FREE_TIER_POOL_5H")
+                .ok()
+                .and_then(|v| v.parse::<i64>().ok())
+                .unwrap_or(200),
+            pro_root_requests_per_5h: std::env::var("PRO_ROOT_REQUESTS_PER_5H")
+                .ok()
+                .and_then(|v| v.parse::<i64>().ok())
+                .unwrap_or(200),
+            max_root_requests_per_5h: std::env::var("MAX_ROOT_REQUESTS_PER_5H")
+                .ok()
+                .and_then(|v| v.parse::<i64>().ok())
+                .unwrap_or(1000),
             dev_coupon_codes: std::env::var("DEV_COUPON_CODES")
                 .unwrap_or_default()
                 .split(',')

@@ -20,19 +20,11 @@ import {
   FileText,
   User,
   LogOut,
-  Shield,
-  Sparkles,
-  Zap,
-  Clock,
-  Calendar,
-  BarChart3,
-  ArrowRight,
 } from "lucide-react";
 import { cn } from "../lib/cn";
 import { useApp } from "../lib/store";
 import { isMacOS } from "../lib/platform";
 import { fallbackAppVersion, resolveAppVersion } from "../lib/appVersion";
-import { fetchAnalyticsSummary, type AnalyticsSummary } from "../lib/cloud";
 import {
   loadTemplates,
   saveTemplates,
@@ -43,18 +35,13 @@ import {
 import { IconButton } from "./IconButton";
 import { api, type Integration } from "../lib/api";
 
-type Section = "account" | "plan" | "general" | "memory" | "personalization" | "models" | "integrations";
+type Section = "account" | "general" | "memory" | "personalization" | "models" | "integrations";
 
 const SECTION_META: Record<Section, { title: string; description: string; icon: React.ReactNode }> = {
   account: {
     title: "Account",
     description: "Sign in with Google to sync your data.",
     icon: <User className="h-4 w-4" />,
-  },
-  plan: {
-    title: "Plan",
-    description: "Quota, hosted routing, and account access.",
-    icon: <Shield className="h-4 w-4" />,
   },
   general: {
     title: "General",
@@ -200,10 +187,10 @@ export function SettingsPage() {
                   type="button"
                   onClick={() => setSection(key)}
                   className={cn(
-                    "press flex items-center gap-2.5 whitespace-nowrap px-4 py-3 text-[13px] font-medium transition-colors lg:rounded-xl lg:px-3 lg:py-2.5",
+                    "press flex items-center gap-2.5 whitespace-nowrap px-4 py-3 text-[13px] font-medium transition-colors lg:rounded-lg lg:px-3 lg:py-2",
                     isActive
-                      ? "text-ink border-b-2 border-ink lg:border-b-0 lg:bg-paper-sunken"
-                      : "text-ink-muted border-b-2 border-transparent hover:text-ink lg:border-b-0 lg:hover:bg-line/40",
+                      ? "text-ink border-b-2 border-ink lg:border-b-0 lg:bg-line/70"
+                      : "text-ink-muted border-b-2 border-transparent hover:text-ink lg:border-b-0 lg:hover:bg-line/60",
                   )}
                 >
                   <span className={cn("flex h-5 w-5 items-center justify-center", isActive ? "text-ink" : "text-ink-faint")}>
@@ -218,7 +205,6 @@ export function SettingsPage() {
           {/* Content area */}
           <div className="min-w-0 flex-1 px-5 lg:px-0 py-5 space-y-5">
             {section === "account" && <AccountPanel />}
-            {section === "plan" && <PlanPanel />}
             {section === "models" && (
               <ModelsPanel
                 providers={providers}
@@ -1110,222 +1096,6 @@ function TemplatesSection() {
 }
 
 // ---------------- Account ----------------
-
-function PlanPanel() {
-  const user = useApp((s) => s.user);
-  const setView = useApp((s) => s.setView);
-  const [summary, setSummary] = useState<AnalyticsSummary | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState("");
-
-  useEffect(() => {
-    let alive = true;
-    setLoading(true);
-    setError("");
-    void fetchAnalyticsSummary()
-      .then((data) => {
-        if (!alive) return;
-        setSummary(data);
-      })
-      .catch((err) => {
-        if (!alive) return;
-        setSummary(null);
-        setError(err instanceof Error ? err.message : String(err));
-      })
-      .finally(() => {
-        if (alive) setLoading(false);
-      });
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  const remaining5h = Math.max((summary?.five_hour_limit || 0) - (summary?.five_hour_used || 0), 0);
-  const remainingWeek = Math.max((summary?.weekly_limit || 0) - (summary?.weekly_used || 0), 0);
-  const isPro = user?.tier === "pro";
-  const percentRemaining = (used = 0, limit = 0) => {
-    if (limit <= 0) return 0;
-    return Math.max(0, Math.min(100, ((limit - used) / limit) * 100));
-  };
-  const percent5h = percentRemaining(summary?.five_hour_used, summary?.five_hour_limit);
-  const percentWeek = percentRemaining(summary?.weekly_used, summary?.weekly_limit);
-
-  return (
-    <div className="flex flex-col gap-5">
-      <div>
-        <h2 className="text-[20px] font-semibold tracking-tight text-ink">Your Plan</h2>
-        <p className="mt-1 text-[14px] leading-6 text-ink-muted">
-          {isPro
-            ? "You're on the Pro plan with extended limits and hosted access."
-            : "Start free and upgrade when you need more."}
-        </p>
-      </div>
-
-      {error && (
-        <section className="rounded-2xl border border-line bg-paper-raised p-4">
-          <div className="text-[13px] font-semibold text-ink">Plan unavailable</div>
-          <p className="mt-1 text-[13px] leading-5 text-ink-muted">
-            {error.includes("401") ? "Sign in to view cloud quota and plan details." : error}
-          </p>
-        </section>
-      )}
-
-      <section className="rounded-2xl border border-line bg-paper-raised p-5">
-        <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-3">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-paper-sunken">
-              {isPro ? (
-                <Sparkles className="h-5 w-5 text-ink-muted" />
-              ) : (
-                <Shield className="h-5 w-5 text-ink-muted" />
-              )}
-            </div>
-            <div>
-              <div className="text-[24px] font-light tracking-tight text-ink">
-                {isPro ? "zWork Pro" : "zWork Free"}
-              </div>
-              <p className="mt-1 max-w-[420px] text-[13px] leading-5 text-ink-muted">
-                {isPro
-                  ? "Hosted routing and higher usage limits are active on this account."
-                  : "Free access is active. Upgrade when the rolling quota becomes a constraint."}
-              </p>
-              {user?.email && (
-                <div className="mt-3 text-[12px] text-ink-faint">{user.email}</div>
-              )}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setView("analytics")}
-            className="press ring-focus inline-flex shrink-0 items-center gap-2 rounded-full bg-ink px-4 py-2 text-[13px] font-medium text-paper hover:bg-ink-soft"
-          >
-            Open analytics
-            <ArrowRight className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-line bg-paper p-5">
-        <div className="mb-4 flex items-start justify-between gap-4">
-          <div>
-            <div className="text-[13px] font-semibold text-ink">Router status</div>
-            <p className="mt-1 text-[12.5px] leading-5 text-ink-muted">
-              {loading
-                ? "Checking hosted routing."
-                : summary?.managed_gateway_status || "No router status available."}
-            </p>
-          </div>
-          <div
-            className={cn(
-              "flex items-center gap-1.5 rounded-full border px-3 py-1 text-[12px]",
-              summary?.managed_gateway_ready
-                ? "border-line bg-paper-raised text-ink"
-                : "border-line bg-paper-sunken text-ink-muted",
-            )}
-          >
-            <Zap className="h-3.5 w-3.5" />
-            {loading ? "Checking" : summary?.managed_gateway_ready ? "Ready" : "Not ready"}
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-2xl border border-line bg-paper-raised p-5">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <div className="text-[13px] font-semibold text-ink">Quota</div>
-            <p className="mt-1 text-[12.5px] text-ink-muted">Rolling root request limits.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setView("analytics")}
-            className="press ring-focus inline-flex items-center gap-2 rounded-full border border-line bg-paper px-3 py-1.5 text-[12px] text-ink-muted hover:bg-paper-sunken hover:text-ink"
-          >
-            <BarChart3 className="h-3.5 w-3.5" />
-            Details
-          </button>
-        </div>
-
-        <div className="space-y-5">
-          <div>
-            <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-paper-sunken">
-                <Clock className="h-4 w-4 text-ink-muted" />
-              </div>
-              <div>
-                <div className="text-[13px] font-semibold text-ink">5-hour limit</div>
-                <div className="text-[11.5px] text-ink-muted">Resets gradually</div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[24px] font-light tracking-tight text-ink">
-                {loading ? "..." : remaining5h}
-              </div>
-              <div className="text-[12px] text-ink-muted">
-                {loading ? "loading" : "remaining"}
-              </div>
-            </div>
-          </div>
-          <div
-            className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken"
-            role="progressbar"
-            aria-valuenow={remaining5h}
-            aria-valuemin={0}
-            aria-valuemax={summary?.five_hour_limit || 0}
-            aria-label={`5-hour limit: ${remaining5h} remaining of ${summary?.five_hour_limit || 0}`}
-          >
-            <div
-              className="h-full rounded-full bg-ink/70 transition-all duration-500"
-              style={{ width: `${percent5h}%` }}
-            />
-          </div>
-          <div className="mt-2 text-[11.5px] text-ink-faint">
-            {loading ? "Loading..." : `${summary?.five_hour_used || 0} used of ${summary?.five_hour_limit || 0}`}
-          </div>
-        </div>
-
-          <div>
-            <div className="flex items-center justify-between gap-4">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-paper-sunken">
-                <Calendar className="h-4 w-4 text-ink-muted" />
-              </div>
-              <div>
-                <div className="text-[13px] font-semibold text-ink">Weekly limit</div>
-                <div className="text-[11.5px] text-ink-muted">Rolling 7 days</div>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[24px] font-light tracking-tight text-ink">
-                {loading ? "..." : remainingWeek}
-              </div>
-              <div className="text-[12px] text-ink-muted">
-                {loading ? "loading" : "remaining"}
-              </div>
-            </div>
-          </div>
-          <div
-            className="mt-4 h-2 overflow-hidden rounded-full bg-paper-sunken"
-            role="progressbar"
-            aria-valuenow={remainingWeek}
-            aria-valuemin={0}
-            aria-valuemax={summary?.weekly_limit || 0}
-            aria-label={`Weekly limit: ${remainingWeek} remaining of ${summary?.weekly_limit || 0}`}
-          >
-            <div
-              className="h-full rounded-full bg-ink/70 transition-all duration-500"
-              style={{ width: `${percentWeek}%` }}
-            />
-          </div>
-          <div className="mt-2 text-[11.5px] text-ink-faint">
-            {loading ? "Loading..." : `${summary?.weekly_used || 0} used of ${summary?.weekly_limit || 0}`}
-          </div>
-        </div>
-        </div>
-      </section>
-    </div>
-  );
-}
 
 function AccountPanel() {
   const user = useApp((s) => s.user);

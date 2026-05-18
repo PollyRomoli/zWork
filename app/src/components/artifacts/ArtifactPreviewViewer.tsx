@@ -106,7 +106,7 @@ export function ArtifactPreviewViewer({ artifact }: { artifact: Artifact }) {
             onLoad={handleLoad}
             title={artifact.title}
             className="h-full w-full border-0 bg-white"
-            sandbox="allow-scripts allow-same-origin allow-forms"
+            sandbox="allow-scripts allow-forms"
           />
         </div>
       </div>

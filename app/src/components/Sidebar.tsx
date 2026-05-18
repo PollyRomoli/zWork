@@ -57,13 +57,18 @@ export function Sidebar() {
         open ? "w-[248px]" : "w-[64px]",
       )}
     >
-      {/* Titlebar drag area — reserve space for the macOS traffic lights. */}
-      {macOS && <div className="titlebar-drag relative h-8 shrink-0" />}
+      {/* Titlebar drag area — reserve space for the macOS traffic lights.
+           On Linux, a smaller spacer keeps the logo from touching the window edge. */}
+      {macOS ? (
+        <div className="titlebar-drag relative h-8 shrink-0" />
+      ) : (
+        <div className="titlebar-drag relative h-3 shrink-0" />
+      )}
 
       {/* Top row: logo (top-left, icon only) + optional "zWork" wordmark + collapse toggle */}
       <div
         className={cn(
-          "flex shrink-0 items-center px-2 pt-3 pb-1",
+          "flex shrink-0 items-center px-2 pt-2 pb-1",
           open ? "justify-between" : "justify-center",
         )}
       >

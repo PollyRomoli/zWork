@@ -12,6 +12,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 from .home import project_dir, projects_dir
+from .utils import uid
 
 
 @dataclass
@@ -24,20 +25,16 @@ class Project:
     chat_ids: list[str] = field(default_factory=list)
 
 
-def _uid() -> str:
-    return f"{int(time.time())}-{hash(str(time.time())) & 0xFFFF:04x}"
-
-
 def create(name: str, description: str = "") -> Project:
     p = Project(
-        id=_uid(),
+        id=uid(),
         name=name,
         description=description,
         created_at=time.time(),
         updated_at=time.time(),
     )
     d = project_dir(p.id)
-    (d / "project.json").write_text(json.dumps(asdict(p), indent=2))
+    (d / "project.json").write_text(json.dumps(asdict(p), indent=2), encoding="utf-8")
     # Create empty project.md
     (d / "project.md").write_text(f"# {name}\n\n", encoding="utf-8")
     return p
@@ -48,7 +45,7 @@ def get(project_id: str) -> Project | None:
     if not p.exists():
         return None
     try:
-        return Project(**json.loads(p.read_text()))
+        return Project(**json.loads(p.read_text(encoding="utf-8")))
     except Exception:
         return None
 
@@ -63,7 +60,7 @@ def list_all() -> list[dict]:
         if not meta.exists():
             continue
         try:
-            results.append(json.loads(meta.read_text()))
+            results.append(json.loads(meta.read_text(encoding="utf-8")))
         except Exception:
             continue
     return results
@@ -78,7 +75,7 @@ def update(project_id: str, **kwargs) -> Project | None:
             setattr(p, k, v)
     p.updated_at = time.time()
     (project_dir(project_id) / "project.json").write_text(
-        json.dumps(asdict(p), indent=2)
+        json.dumps(asdict(p), indent=2), encoding="utf-8"
     )
     return p
 

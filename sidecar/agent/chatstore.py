@@ -2,20 +2,11 @@
 from __future__ import annotations
 
 import json
-import time
-import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Any
 
 from .home import chats_dir
-
-
-def _now_ms() -> int:
-    return int(time.time() * 1000)
-
-
-def _uid() -> str:
-    return uuid.uuid4().hex[:12]
+from .utils import now_ms, uid
 
 
 @dataclass
@@ -45,9 +36,9 @@ def _path(chat_id: str):
 
 
 def create(title: str = "New chat", model: str = "", project_id: str = "") -> Chat:
-    now = _now_ms()
+    now = now_ms()
     c = Chat(
-        id=_uid(),
+        id=uid(),
         title=title,
         created_at=now,
         updated_at=now,
@@ -62,7 +53,7 @@ def list_all() -> list[dict[str, Any]]:
     out = []
     for p in chats_dir().glob("*.json"):
         try:
-            d = json.loads(p.read_text())
+            d = json.loads(p.read_text(encoding="utf-8"))
             out.append({
                 "id": d["id"],
                 "title": d.get("title", "Untitled"),
@@ -82,7 +73,7 @@ def get(chat_id: str) -> Chat | None:
     p = _path(chat_id)
     if not p.exists():
         return None
-    d = json.loads(p.read_text())
+    d = json.loads(p.read_text(encoding="utf-8"))
     msgs = [ChatMessage(**m) for m in d.get("messages", [])]
     return Chat(
         id=d["id"],
@@ -99,7 +90,7 @@ def get(chat_id: str) -> Chat | None:
 
 def save(chat: Chat) -> None:
     p = _path(chat.id)
-    p.write_text(json.dumps(asdict(chat), indent=2))
+    p.write_text(json.dumps(asdict(chat), indent=2), encoding="utf-8")
 
 
 def delete(chat_id: str) -> bool:
@@ -115,7 +106,7 @@ def rename(chat_id: str, title: str) -> Chat | None:
     if not c:
         return None
     c.title = title
-    c.updated_at = _now_ms()
+    c.updated_at = now_ms()
     save(c)
     return c
 
@@ -124,7 +115,7 @@ def append_message(chat_id: str, role: str, content: str) -> ChatMessage | None:
     c = get(chat_id)
     if not c:
         return None
-    msg = ChatMessage(id=_uid(), role=role, content=content, created_at=_now_ms())
+    msg = ChatMessage(id=uid(), role=role, content=content, created_at=now_ms())
     c.messages.append(msg)
     c.updated_at = msg.created_at
     # Auto-title from first user message
@@ -156,7 +147,7 @@ def update_message(
         break
     if updated is None:
         return None
-    c.updated_at = _now_ms()
+    c.updated_at = now_ms()
     save(c)
     return updated
 
@@ -166,7 +157,7 @@ def set_project(chat_id: str, project_id: str) -> Chat | None:
     if not c:
         return None
     c.project_id = project_id
-    c.updated_at = _now_ms()
+    c.updated_at = now_ms()
     save(c)
     return c
 
@@ -177,6 +168,6 @@ def set_compaction(chat_id: str, summary: str, cursor: int) -> Chat | None:
         return None
     c.compacted_summary = summary
     c.compaction_cursor = max(0, int(cursor))
-    c.updated_at = _now_ms()
+    c.updated_at = now_ms()
     save(c)
     return c

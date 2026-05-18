@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "sidecar"
-version = "0.1.0"
+version = "0.3.18-beta.10"
 description = "zWork: Your Personal AI Assistant that actually gets work done on your computer."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -26,7 +26,7 @@ dependencies = [
 ]
 
 [project.scripts]
-sidecar = "sidecar.app:main"
+sidecar = "sidecar.server:main"
 zwork-server = "sidecar.server:main"
 
 [tool.setuptools]

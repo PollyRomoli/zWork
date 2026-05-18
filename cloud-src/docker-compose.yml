@@ -73,7 +73,7 @@ services:
       - postgres
       - better_auth
 
-  # 3. PostgreSQL Database
+  # 4. PostgreSQL Database
   postgres:
     image: postgres:15-alpine
     restart: unless-stopped
@@ -84,13 +84,13 @@ services:
     volumes:
       - pg_data:/var/lib/postgresql/data
 
-  # 4. DB Management (pgAdmin)
+  # 5. DB Management (pgAdmin)
   pgadmin:
     image: dpage/pgadmin4
     restart: unless-stopped
     environment:
       - PGADMIN_DEFAULT_EMAIL=admin@tryzwork.app
-      - PGADMIN_DEFAULT_PASSWORD=zwork_admin_pass
+      - PGADMIN_DEFAULT_PASSWORD=${PGADMIN_DEFAULT_PASSWORD}
     depends_on:
       - postgres
 

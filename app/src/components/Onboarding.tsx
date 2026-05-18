@@ -662,14 +662,7 @@ function MorphContainer({ children }: { children: React.ReactNode }) {
   );
 }
 
-const ROTATING_WORDS = [
-  "deep work",
-  "getting unstuck",
-  "shipping faster",
-  "clear thinking",
-  "brainstorming",
-  "side projects",
-];
+import { ROTATING_WORDS } from "../lib/constants";
 
 function OnboardingVisual() {
   const [index, setIndex] = useState(0);

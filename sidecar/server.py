@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+from dataclasses import asdict
 import ipaddress
 import json
+import logging
 import os
 import platform
 import getpass
@@ -26,26 +28,51 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 try:
+    from . import __version__
     from .agent import chatstore, compaction, detect, providers, skills as skills_mod
     from .agent import settings as settings_mod
     from .agent import home as home_mod
     from .agent import projects as projects_mod
     from .agent.env_loader import load_dotenv
     from .agent.runtime import RunContext
-    from .core.util import new_id
+    from .agent.utils import new_id
 except ImportError:  # pragma: no cover - PyInstaller/script entrypoint fallback
+    from sidecar import __version__
     from sidecar.agent import chatstore, compaction, detect, providers, skills as skills_mod
     from sidecar.agent import settings as settings_mod
     from sidecar.agent import home as home_mod
     from sidecar.agent import projects as projects_mod
     from sidecar.agent.env_loader import load_dotenv
     from sidecar.agent.runtime import RunContext
-    from sidecar.core.util import new_id
+    from sidecar.agent.utils import new_id
 
 # Load .env from repo root (optional).
 load_dotenv()
 
-app = FastAPI(title="zWork", version="0.1.0")
+
+def _get_mcp_manager():
+    try:
+        from .agent.mcp import get_manager
+    except ImportError:  # pragma: no cover
+        from sidecar.agent.mcp import get_manager
+    return get_manager()
+
+
+@contextlib.asynccontextmanager
+async def lifespan(app_instance: FastAPI):
+    try:
+        await _get_mcp_manager().start()
+    except Exception:
+        pass
+    yield
+    try:
+        await _get_mcp_manager().stop()
+    except Exception:
+        pass
+
+
+app = FastAPI(title="zWork", version=__version__, lifespan=lifespan)
+log = logging.getLogger(__name__)
 
 # Serve built frontend as static files when running as a web app.
 _STATIC_DIR = Path(__file__).resolve().parent.parent / "app" / "dist"
@@ -162,7 +189,17 @@ def _artifact_hint(message: str) -> str:
 
 @app.get("/api/health")
 def health() -> dict:
-    return {"ok": True}
+    checks: dict[str, bool] = {}
+    try:
+        data_dir = home_mod.data_dir()
+        probe = data_dir / ".healthcheck"
+        probe.write_text("ok", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+        checks["data_dir_writable"] = True
+    except Exception:
+        checks["data_dir_writable"] = False
+    ok = all(checks.values())
+    return {"ok": ok, "checks": checks}
 
 
 def _os_pretty() -> str:
@@ -348,7 +385,7 @@ def _onboarding_state() -> dict:
     if not p.exists():
         return {"completed": False}
     try:
-        return json.loads(p.read_text())
+        return json.loads(p.read_text(encoding="utf-8"))
     except Exception:
         return {"completed": False}
 
@@ -575,31 +612,7 @@ async def onboard_complete(body: OnboardBody) -> dict:
 
 @app.get("/api/integrations")
 def integrations() -> dict:
-    return {"integrations": [i.__dict__ for i in detect.detect_all()]}
-
-
-@app.on_event("startup")
-async def _start_mcp_manager() -> None:
-    try:
-        from .agent.mcp import get_manager
-    except ImportError:  # pragma: no cover
-        from sidecar.agent.mcp import get_manager  # type: ignore[no-redef]
-    try:
-        await get_manager().start()
-    except Exception:
-        pass
-
-
-@app.on_event("shutdown")
-async def _stop_mcp_manager() -> None:
-    try:
-        from .agent.mcp import get_manager
-    except ImportError:  # pragma: no cover
-        from sidecar.agent.mcp import get_manager  # type: ignore[no-redef]
-    try:
-        await get_manager().stop()
-    except Exception:
-        pass
+    return {"integrations": [asdict(i) for i in detect.detect_all()]}
 
 
 @app.get("/api/mcp/servers")
@@ -821,7 +834,7 @@ def list_projects() -> dict:
 @app.post("/api/projects")
 def create_project(body: ProjectCreate) -> dict:
     p = projects_mod.create(name=body.name, description=body.description)
-    return {"project": p.__dict__}
+    return {"project": asdict(p)}
 
 
 @app.get("/api/projects/{project_id}")
@@ -831,7 +844,7 @@ def get_project(project_id: str) -> dict:
     p = projects_mod.get(project_id)
     if not p:
         raise HTTPException(404, "project not found")
-    return {"project": p.__dict__}
+    return {"project": asdict(p)}
 
 
 @app.patch("/api/projects/{project_id}")
@@ -846,7 +859,7 @@ def update_project(project_id: str, body: ProjectUpdate) -> dict:
     p = projects_mod.update(project_id, **kwargs)
     if not p:
         raise HTTPException(404, "project not found")
-    return {"project": p.__dict__}
+    return {"project": asdict(p)}
 
 
 @app.delete("/api/projects/{project_id}")
@@ -919,10 +932,17 @@ def _safe_proxy_base_url(base_url: str) -> str:
     return base_url.rstrip("/")
 
 
-@app.get("/api/ollama/models")
-async def ollama_models(base_url: str = "https://ollama.com/v1", api_key: str = "") -> dict:
+class OllamaModelsBody(BaseModel):
+    base_url: str = "https://ollama.com/v1"
+    api_key: str = ""
+
+
+@app.post("/api/ollama/models")
+async def ollama_models(body: OllamaModelsBody) -> dict:
     """Proxy Ollama's OpenAI-compatible `/v1/models` listing so the onboarding
     UI can show a dropdown. Returns `{models: [{id, name}], error?}`."""
+    base_url = body.base_url
+    api_key = body.api_key
     if not providers.is_safe_ollama_url(base_url):
         raise HTTPException(400, "unauthorized ollama base_url")
 
@@ -1012,7 +1032,7 @@ def _chat_public(c: chatstore.Chat) -> dict[str, Any]:
         "project_id": c.project_id,
         "compacted_summary": c.compacted_summary,
         "compaction_cursor": c.compaction_cursor,
-        "messages": [m.__dict__ for m in c.messages],
+        "messages": [asdict(m) for m in c.messages],
     }
 
 
@@ -1398,28 +1418,28 @@ def _acquire_pid_lock() -> bool:
 
     if pid_path.exists():
         try:
-            stale_pid = int(pid_path.read_text().strip())
+            stale_pid = int(pid_path.read_text(encoding="utf-8").strip())
             if stale_pid != os.getpid():
                 try:
                     os.kill(stale_pid, 0)
                     # Process exists — refuse to start a second instance.
-                    print(f"Backend already running with PID {stale_pid}; refusing to start duplicate.")
+                    log.warning("Backend already running with PID %s; refusing to start duplicate.", stale_pid)
                     return False
                 except OSError:
                     # Stale PID file — the process no longer exists.
-                    print(f"Removing stale PID lock (pid={stale_pid} is gone).")
+                    log.info("Removing stale PID lock (pid=%s is gone).", stale_pid)
         except (ValueError, FileNotFoundError):
             pass
         pid_path.unlink(missing_ok=True)
 
-    pid_path.write_text(str(os.getpid()))
+    pid_path.write_text(str(os.getpid()), encoding="utf-8")
     return True
 
 
 def _release_pid_lock() -> None:
     pid_path = _pid_file_path()
     try:
-        if pid_path.exists() and int(pid_path.read_text().strip()) == os.getpid():
+        if pid_path.exists() and int(pid_path.read_text(encoding="utf-8").strip()) == os.getpid():
             pid_path.unlink()
     except Exception:
         pass
@@ -1429,7 +1449,7 @@ def _setup_signal_handlers() -> None:
     import signal as _signal
 
     def _on_term(signum: int, frame: Any) -> None:
-        print(f"zWork backend received signal {signum}, shutting down...")
+        log.info("zWork backend received signal %s, shutting down...", signum)
         _release_pid_lock()
         # Kill any active child process groups spawned by this backend.
         with contextlib.suppress(Exception):
@@ -1466,7 +1486,7 @@ def main() -> None:
 
     _setup_signal_handlers()
 
-    print(f"zWork web app -> http://{host}:{port} (pid={os.getpid()})")
+    log.info("zWork web app -> http://%s:%s (pid=%s)", host, port, os.getpid())
     try:
         uvicorn.run(
             app,

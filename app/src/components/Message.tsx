@@ -203,6 +203,8 @@ export function Message({
   message,
   onAskSubmit,
   onOpenArtifact,
+  onRetry,
+  onBadResponse,
   artifacts,
   streaming,
   activities,
@@ -211,6 +213,8 @@ export function Message({
   message: Msg;
   onAskSubmit?: (msgId: string, choice: string) => void;
   onOpenArtifact?: (artifact: Artifact) => void;
+  onRetry?: (messageId: string) => void;
+  onBadResponse?: (messageId: string) => void;
   artifacts?: Artifact[];
   streaming?: boolean;
   activities?: Activity[];
@@ -373,9 +377,9 @@ export function Message({
               {message.providerLabel || "Model"}: {message.resolvedModel}
             </span>
           )}
-          <IconButton icon={<Copy />} label="Copy" size="sm" />
-          <IconButton icon={<RefreshCcw />} label="Regenerate" size="sm" />
-          <IconButton icon={<ThumbsDown />} label="Bad response" size="sm" />
+          <IconButton icon={<Copy />} label="Copy" size="sm" onClick={() => navigator.clipboard.writeText(message.content).catch(() => {})} />
+          <IconButton icon={<RefreshCcw />} label="Regenerate" size="sm" onClick={() => onRetry?.(message.id)} />
+          <IconButton icon={<ThumbsDown />} label="Bad response" size="sm" onClick={() => onBadResponse?.(message.id)} />
           <span className="ml-auto text-[10.5px] text-ink-faint">{formatTime(message.createdAt)}</span>
         </div>
       </div>

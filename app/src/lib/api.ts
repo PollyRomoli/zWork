@@ -374,12 +374,14 @@ export const api = {
       j<{ content: string }>(r),
     ),
 
-  ollamaModels: (base_url: string, api_key: string) => {
-    const qs = new URLSearchParams({ base_url, api_key });
-    return localFetch(`/api/ollama/models?${qs.toString()}`).then((r) =>
+  ollamaModels: (base_url: string, api_key: string) =>
+    localFetch(`/api/ollama/models`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ base_url, api_key }),
+    }).then((r) =>
       j<{ models: { id: string; name: string }[]; error?: string }>(r),
-    );
-  },
+    ),
 
   putProjectContext: (id: string, content: string) =>
     localFetch(`/api/projects/${id}/context`, {

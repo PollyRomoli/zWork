@@ -40,6 +40,8 @@ fi
 pids=$(lsof -ti ":${PORT}" 2>/dev/null || true)
 if [[ -n "${pids}" ]]; then
   echo "Killing stale process(es) on port ${PORT}: ${pids}"
+  kill -TERM ${pids} 2>/dev/null || true
+  sleep 0.5
   kill -9 ${pids} 2>/dev/null || true
 fi
 
