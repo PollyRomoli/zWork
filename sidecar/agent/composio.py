@@ -209,9 +209,10 @@ class ComposioManager:
 
             client = Composio(api_key=self._api_key)
             result = client.tools.execute(
-                slug=slug, user_id=self._user_id, params=params
+                slug=slug, user_id=self._user_id, arguments=params
             )
-            text = json.dumps(result, default=str) if result else "ok"
+            data = result.model_dump() if hasattr(result, "model_dump") else result
+            text = json.dumps(data, default=str) if data else "ok"
             return {"isError": False, "content": [{"type": "text", "text": text}]}
         except Exception as e:
             log.warning("composio call_tool(%s) failed: %s", slug, e)
@@ -228,8 +229,11 @@ class ComposioManager:
         client = Composio(api_key=self._api_key)
         toolkit = app_name.upper()
         try:
-            link = client.get_connect_link(user_id=self._user_id, toolkits=[toolkit])
-            return {"url": str(link.url) if hasattr(link, "url") else str(link)}
+            result = client.toolkits.authorize(
+                user_id=self._user_id, toolkit=toolkit
+            )
+            url = getattr(result, "redirect_url", None) or str(result)
+            return {"url": str(url)}
         except Exception as e:
             raise RuntimeError(
                 f"Failed to generate connect link for {app_name}: {e}"
@@ -242,12 +246,20 @@ class ComposioManager:
             from composio import Composio
 
             client = Composio(api_key=self._api_key)
-            accounts = client.get_connected_accounts(user_id=self._user_id) or []
+            resp = client.connected_accounts.list(user_ids=[self._user_id])
+            items = getattr(resp, "items", []) or []
             result = []
-            for acc in accounts:
-                app_id = str(
-                    getattr(acc, "appUniqueId", "") or getattr(acc, "app", "") or ""
-                ).lower()
+            for acc in items:
+                toolkit_obj = getattr(acc, "toolkit", None)
+                app_id = ""
+                if toolkit_obj is not None:
+                    app_id = getattr(toolkit_obj, "slug", "") or ""
+                if not app_id:
+                    app_id = (
+                        getattr(acc, "appUniqueId", "")
+                        or getattr(acc, "app", "")
+                    )
+                app_id = str(app_id).lower()
                 status = str(getattr(acc, "status", "UNKNOWN"))
                 display = APP_DISPLAY.get(app_id, {})
                 result.append(
@@ -292,9 +304,11 @@ class ComposioManager:
                     tools = client.tools.get(
                         user_id=self._user_id, toolkits=[app.upper()]
                     )
+                    if not tools:
+                        continue
                 except Exception:
                     continue
-                for t in tools or []:
+                for t in tools:
                     slug = str(getattr(t, "slug", "") or "")
                     if whitelist and slug not in whitelist:
                         continue
