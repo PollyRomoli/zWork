@@ -1,4 +1,5 @@
 """Conversation compaction for long-running chats."""
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -183,7 +184,9 @@ async def _summarize_openai(
         r = await c.post(url, json=body, headers=headers)
         r.raise_for_status()
         data = r.json()
-    return (((data.get("choices") or [{}])[0].get("message") or {}).get("content") or "").strip()
+    return (
+        ((data.get("choices") or [{}])[0].get("message") or {}).get("content") or ""
+    ).strip()
 
 
 def render_summary_message(summary: str) -> dict:

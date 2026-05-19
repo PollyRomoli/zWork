@@ -6,12 +6,14 @@ __all__ = ["__version__"]
 def _read_version() -> str:
     try:
         from importlib.metadata import version
+
         return version("sidecar")
     except Exception:
         pass
     try:
         import tomllib
         from pathlib import Path
+
         pyproject = Path(__file__).resolve().parent.parent / "pyproject.toml"
         if pyproject.exists():
             data = tomllib.loads(pyproject.read_text(encoding="utf-8"))

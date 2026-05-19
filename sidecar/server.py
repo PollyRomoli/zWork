@@ -1,4 +1,5 @@
 """zWork backend: FastAPI server."""
+
 from __future__ import annotations
 
 import asyncio
@@ -38,7 +39,13 @@ try:
     from .agent.utils import new_id
 except ImportError:  # pragma: no cover - PyInstaller/script entrypoint fallback
     from sidecar import __version__
-    from sidecar.agent import chatstore, compaction, detect, providers, skills as skills_mod
+    from sidecar.agent import (
+        chatstore,
+        compaction,
+        detect,
+        providers,
+        skills as skills_mod,
+    )
     from sidecar.agent import settings as settings_mod
     from sidecar.agent import home as home_mod
     from sidecar.agent import projects as projects_mod
@@ -125,6 +132,7 @@ async def add_security_headers(request: Request, call_next):
 
 # ---------------- Schemas ----------------
 
+
 class SettingsPatch(BaseModel):
     api_keys: dict[str, str] | None = None
     provider_config: dict[str, dict[str, str]] | None = None
@@ -136,8 +144,8 @@ class SettingsPatch(BaseModel):
 class CustomModelBody(BaseModel):
     id: str | None = None
     name: str
-    shape: str            # "anthropic" | "openai"
-    credential: str       # "anthropic" | "openai" | "claude_code"
+    shape: str  # "anthropic" | "openai"
+    credential: str  # "anthropic" | "openai" | "claude_code"
     model_id: str
     base_url_override: str = ""
 
@@ -203,18 +211,41 @@ class ComposioConnectBody(BaseModel):
 
 def _artifact_hint(message: str) -> str:
     t = message.lower()
-    if any(k in t for k in ["document", "doc", "brief", "report", "note", "summary", "outline", "write a", "draft a", "make a document"]):
+    if any(
+        k in t
+        for k in [
+            "document",
+            "doc",
+            "brief",
+            "report",
+            "note",
+            "summary",
+            "outline",
+            "write a",
+            "draft a",
+            "make a document",
+        ]
+    ):
         return "The user's request clearly wants a document artifact. Create a sidebar artifact of kind doc. Do not wrap it in code fences. Do not emit the words Text, Open, or undefined."
-    if any(k in t for k in ["table", "sheet", "spreadsheet", "csv", "tsv", "rows", "columns"]):
+    if any(
+        k in t
+        for k in ["table", "sheet", "spreadsheet", "csv", "tsv", "rows", "columns"]
+    ):
         return "The user's request clearly wants a table or spreadsheet artifact. Create a sidebar artifact of kind sheet. Do not wrap it in code fences. Do not emit the words Text, Open, or undefined."
-    if any(k in t for k in ["chart", "graph", "plot", "visualization", "visualise", "visualize"]):
+    if any(
+        k in t
+        for k in ["chart", "graph", "plot", "visualization", "visualise", "visualize"]
+    ):
         return "The user's request clearly wants a graph artifact. Create a sidebar artifact of kind graph. Do not wrap it in code fences. Do not emit the words Text, Open, or undefined."
-    if any(k in t for k in ["code snippet", "script", "example code", "runnable example"]):
+    if any(
+        k in t for k in ["code snippet", "script", "example code", "runnable example"]
+    ):
         return "The user's request clearly wants a code artifact. Create a sidebar artifact of kind code. Do not wrap it in code fences. Do not emit the words Text, Open, or undefined."
     return "The user's request may or may not want an artifact. If the output is best represented as an editable deliverable, create one. If you create one, do not wrap it in code fences and do not emit the words Text, Open, or undefined."
 
 
 # ---------------- Health / meta ----------------
+
 
 @app.get("/api/health")
 def health() -> dict:
@@ -286,6 +317,7 @@ def _display_name() -> str:
     try:
         if platform.system() == "Darwin":
             import subprocess as _sp
+
             out = _sp.run(["id", "-F"], capture_output=True, text=True, timeout=2)
             full = (out.stdout or "").strip()
             if full:
@@ -377,6 +409,7 @@ def me() -> dict:
 
 # ---------------- Skills ----------------
 
+
 @app.get("/api/skills")
 def skills_list(refresh: bool = False) -> dict:
     if refresh:
@@ -385,6 +418,7 @@ def skills_list(refresh: bool = False) -> dict:
 
 
 # ---------------- Onboarding ----------------
+
 
 class OnboardAnswer(BaseModel):
     key: str
@@ -395,8 +429,11 @@ class OnboardAnswer(BaseModel):
 class OnboardBody(BaseModel):
     """Full onboarding payload. `answers` is the Q/A list; `credential` is the
     chosen provider setup (shape/base_url/api_key/model_id)."""
+
     answers: list[OnboardAnswer]
-    credential: dict[str, str] | None = None  # {shape, credential, api_key, base_url, model_id, model_name}
+    credential: dict[str, str] | None = (
+        None  # {shape, credential, api_key, base_url, model_id, model_name}
+    )
     prefer_theme: str | None = None  # "light" | "dark" | "system"
     telemetry_enabled: bool | None = None
 
@@ -547,7 +584,9 @@ async def _generate_zwork_md(answers: list[OnboardAnswer], user_name: str) -> st
     return generated
 
 
-def _fallback_zwork_md(user_name: str, qna_text: str, answers: list[OnboardAnswer]) -> str:
+def _fallback_zwork_md(
+    user_name: str, qna_text: str, answers: list[OnboardAnswer]
+) -> str:
     # Pull common keys for a crisper fallback
     by_key = {a.key: a.answer for a in answers if a.answer}
     vibe = by_key.get("vibe", "Balanced")
@@ -585,7 +624,9 @@ def _fallback_zwork_md(user_name: str, qna_text: str, answers: list[OnboardAnswe
 """
 
 
-def _write_onboarding_complete(answers: list[OnboardAnswer], user_name: str, zmd: Path) -> None:
+def _write_onboarding_complete(
+    answers: list[OnboardAnswer], user_name: str, zmd: Path
+) -> None:
     home_mod.onboarding_path().write_text(
         json.dumps(
             {
@@ -626,7 +667,8 @@ async def onboard_complete(body: OnboardBody) -> dict:
         if model_id:
             custom_id = (
                 providers.ZWORK_ROUTER_ZWORK_ID
-                if credkey == "zwork_router" or model_id == providers.ZWORK_ROUTER_MODEL_ID
+                if credkey == "zwork_router"
+                or model_id == providers.ZWORK_ROUTER_MODEL_ID
                 else None
             )
             if custom_id and not home_mod.is_safe_id(custom_id):
@@ -638,7 +680,9 @@ async def onboard_complete(body: OnboardBody) -> dict:
                 shape=shape,
                 credential=credkey,
                 model_id=model_id,
-                base_url_override=base_url if credkey in ("openai", "anthropic", "zwork_router") else "",
+                base_url_override=base_url
+                if credkey in ("openai", "anthropic", "zwork_router")
+                else "",
             )
             s.default_model = m.id
         if body.telemetry_enabled is not None:
@@ -666,7 +710,9 @@ async def onboard_complete(body: OnboardBody) -> dict:
     await _record_telemetry_event(
         "onboarding_completed",
         properties={
-            "telemetry_enabled": True if body.telemetry_enabled is None else bool(body.telemetry_enabled),
+            "telemetry_enabled": True
+            if body.telemetry_enabled is None
+            else bool(body.telemetry_enabled),
             "credential": (body.credential or {}).get("credential", ""),
             "shape": (body.credential or {}).get("shape", ""),
             "has_custom_model": bool((body.credential or {}).get("model_id")),
@@ -700,6 +746,7 @@ def mcp_tools() -> dict:
 
 
 # ---------------- Composio app integrations ----------------
+
 
 @app.get("/api/composio/status")
 def composio_status() -> dict:
@@ -762,6 +809,7 @@ def provider_status() -> dict:
 
 # ---------------- Settings ----------------
 
+
 @app.get("/api/settings")
 def get_settings() -> dict:
     return settings_mod.public_view(settings_mod.load())
@@ -805,6 +853,7 @@ def put_settings(patch: SettingsPatch) -> dict:
 
 # ---------------- Telemetry ----------------
 
+
 @app.post("/api/telemetry/event")
 async def telemetry_event(body: TelemetryEventBody) -> dict:
     await _record_telemetry_event(
@@ -817,6 +866,7 @@ async def telemetry_event(body: TelemetryEventBody) -> dict:
 
 
 # ---------------- Custom models ----------------
+
 
 @app.get("/api/custom-models")
 def list_custom_models() -> dict:
@@ -860,6 +910,7 @@ def delete_custom_model(model_id: str) -> dict:
 
 # ---------------- Memory ----------------
 
+
 @app.get("/api/memory")
 def get_memory() -> dict:
     p = home_mod.memory_path()
@@ -877,6 +928,7 @@ def put_memory(body: ContentBody) -> dict:
 
 
 # ---------------- User MD (zwork.md) ----------------
+
 
 @app.get("/api/user-md")
 def get_user_md() -> dict:
@@ -896,13 +948,16 @@ def put_user_md(body: ContentBody) -> dict:
 
 # ---------------- Uploads ----------------
 
+
 @app.post("/api/uploads")
 def upload_files(body: UploadBody) -> dict:
     uploads_dir = home_mod.workspace_uploads_dir()
     results: list[dict[str, Any]] = []
     for item in body.files:
         safe_name = Path(item.name or "upload").name
-        suffix = Path(safe_name).suffix or mimetypes.guess_extension(item.mime or "") or ""
+        suffix = (
+            Path(safe_name).suffix or mimetypes.guess_extension(item.mime or "") or ""
+        )
         stem = Path(safe_name).stem or "upload"
         out = uploads_dir / f"{stem}-{new_id('upload')}{suffix}"
 
@@ -923,18 +978,21 @@ def upload_files(body: UploadBody) -> dict:
             out.write_text("", encoding="utf-8")
             size = 0
 
-        results.append({
-            "client_id": item.client_id,
-            "name": safe_name,
-            "path": str(out),
-            "mime": item.mime,
-            "kind": item.kind,
-            "size": size,
-        })
+        results.append(
+            {
+                "client_id": item.client_id,
+                "name": safe_name,
+                "path": str(out),
+                "mime": item.mime,
+                "kind": item.kind,
+                "size": size,
+            }
+        )
     return {"files": results}
 
 
 # ---------------- Projects ----------------
+
 
 @app.get("/api/projects")
 def list_projects() -> dict:
@@ -1005,6 +1063,7 @@ def put_project_context(project_id: str, body: ContentBody) -> dict:
 
 # ---------------- Ollama model proxy ----------------
 
+
 def _safe_proxy_base_url(base_url: str) -> str:
     """Validate a user-supplied base URL before the sidecar fetches it.
 
@@ -1057,6 +1116,7 @@ async def ollama_models(body: OllamaModelsBody) -> dict:
         raise HTTPException(400, "unauthorized ollama base_url")
 
     import httpx
+
     try:
         clean_base = _safe_proxy_base_url(base_url)
     except ValueError as e:
@@ -1088,6 +1148,7 @@ async def ollama_models(body: OllamaModelsBody) -> dict:
 
 
 # ---------------- Chats ----------------
+
 
 @app.get("/api/chats")
 def list_chats() -> dict:
@@ -1147,6 +1208,7 @@ def _chat_public(c: chatstore.Chat) -> dict[str, Any]:
 
 
 # ---------------- Chat stream ----------------
+
 
 def _resolve_model_id(requested: str | None, s: settings_mod.Settings) -> str | None:
     if requested and providers.lookup_model(requested, s):
@@ -1258,6 +1320,7 @@ async def chat_stream(req: StreamRequest):
     )
 
     if not model_id:
+
         async def no_model_sse() -> Any:
             yield _sse({"type": "chat", "id": chat.id, "title": chat.title})
             msg = (
@@ -1268,7 +1331,9 @@ async def chat_stream(req: StreamRequest):
             yield _sse({"type": "status", "text": "Setup needed"})
             # Stream it as a delta so it appears in the assistant bubble
             for chunk_start in range(0, len(msg), 24):
-                yield _sse({"type": "delta", "text": msg[chunk_start:chunk_start + 24]})
+                yield _sse(
+                    {"type": "delta", "text": msg[chunk_start : chunk_start + 24]}
+                )
             chatstore.append_message(chat.id, "assistant", msg)
             yield _sse({"type": "needs_setup"})
             yield _sse({"type": "done"})
@@ -1282,6 +1347,7 @@ async def chat_stream(req: StreamRequest):
                     "resolved_model": "",
                 },
             )
+
         return StreamingResponse(no_model_sse(), media_type="text/event-stream")
 
     project_name = ""
@@ -1298,7 +1364,8 @@ async def chat_stream(req: StreamRequest):
     prompt = settings_mod.build_system_prompt(
         model_name=model_meta.get("model_id") or model_id,
         provider_name=(
-            "local credentials" if model_meta.get("credential") == "claude_code"
+            "local credentials"
+            if model_meta.get("credential") == "claude_code"
             else model_meta.get("subtitle") or "a model provider"
         ),
         user_name=_display_name(),
@@ -1319,11 +1386,13 @@ async def chat_stream(req: StreamRequest):
             lines.append(f"- {a.name} → {a.path}")
         attachment_block = "\n".join(lines)
     else:
-        attachment_block = "\n".join([
-            "## Current interaction context",
-            f"Artifact mode: {'on' if req.artifact_mode else 'off'}",
-            "Attachments: none.",
-        ])
+        attachment_block = "\n".join(
+            [
+                "## Current interaction context",
+                f"Artifact mode: {'on' if req.artifact_mode else 'off'}",
+                "Attachments: none.",
+            ]
+        )
     prompt = f"{prompt}\n\n{attachment_block}\n\n## Artifact intent hint\n{_artifact_hint(req.message)}"
 
     raw_history = [
@@ -1365,7 +1434,11 @@ async def chat_stream(req: StreamRequest):
 
         def flush_partial(force: bool = False) -> None:
             nonlocal last_flush
-            if not force and len(full_text) < 64 and (time.monotonic() - last_flush) < 0.75:
+            if (
+                not force
+                and len(full_text) < 64
+                and (time.monotonic() - last_flush) < 0.75
+            ):
                 return
             chatstore.update_message(
                 chat.id,
@@ -1376,22 +1449,31 @@ async def chat_stream(req: StreamRequest):
             last_flush = time.monotonic()
 
         try:
-            async for evt in _heartbeat_stream(providers.stream_chat(
-                [{"role": "system", "content": prompt}, *history],
-                model_id,
-                s,
-                run_ctx,
-                project_id=req.project_id,
-                plan_mode=req.plan_mode,
-                auto_approve_destructive=req.auto_approve_destructive,
-            )):
+            async for evt in _heartbeat_stream(
+                providers.stream_chat(
+                    [{"role": "system", "content": prompt}, *history],
+                    model_id,
+                    s,
+                    run_ctx,
+                    project_id=req.project_id,
+                    plan_mode=req.plan_mode,
+                    auto_approve_destructive=req.auto_approve_destructive,
+                )
+            ):
                 et = evt.get("type")
                 run_ctx.last_event_type = str(et or "")
                 if et == "delta":
                     full_text += evt.get("text", "")
                     flush_partial()
                 elif et == "activity":
-                    existing = next((idx for idx, item in enumerate(activities) if item.get("id") == evt.get("id")), None)
+                    existing = next(
+                        (
+                            idx
+                            for idx, item in enumerate(activities)
+                            if item.get("id") == evt.get("id")
+                        ),
+                        None,
+                    )
                     entry = {
                         "id": evt.get("id"),
                         "label": evt.get("label"),
@@ -1402,7 +1484,9 @@ async def chat_stream(req: StreamRequest):
                         activities.append(entry)
                     else:
                         activities[existing] = entry
-                    chatstore.update_message(chat.id, assistant_msg.id, activities=activities)
+                    chatstore.update_message(
+                        chat.id, assistant_msg.id, activities=activities
+                    )
                 elif et == "error":
                     terminal_status = "error"
                 elif et in ("done", "end"):
@@ -1413,7 +1497,9 @@ async def chat_stream(req: StreamRequest):
             run_ctx.last_error = "Client stream cancelled."
             run_ctx.log("run_cancelled", error=run_ctx.last_error)
             flush_partial(force=True)
-            chatstore.update_message(chat.id, assistant_msg.id, content=full_text, activities=activities)
+            chatstore.update_message(
+                chat.id, assistant_msg.id, content=full_text, activities=activities
+            )
             await _record_telemetry_event(
                 "chat_turn_finished",
                 properties={
@@ -1432,14 +1518,16 @@ async def chat_stream(req: StreamRequest):
             yield _sse({"type": "error", "text": str(e)})
             await _record_telemetry_event(
                 "agent_task_error",
-                properties={"chat_id": chat.id, "error": str(e), "model": model_id}
+                properties={"chat_id": chat.id, "error": str(e), "model": model_id},
             )
         if full_text and terminal_status == "empty":
             terminal_status = "ok"
         if not saw_terminal:
             yield _sse({"type": "end"})
         flush_partial(force=True)
-        chatstore.update_message(chat.id, assistant_msg.id, content=full_text, activities=activities)
+        chatstore.update_message(
+            chat.id, assistant_msg.id, content=full_text, activities=activities
+        )
         run_ctx.log(
             "run_finished",
             status=terminal_status,
@@ -1502,7 +1590,11 @@ if _STATIC_DIR.is_dir():
         # Try to serve a matching static file first (e.g. favicon, SVGs).
         if path:
             normalized = Path(path.lstrip("/"))
-            if not normalized.is_absolute() and ".." not in normalized.parts and "\\" not in path:
+            if (
+                not normalized.is_absolute()
+                and ".." not in normalized.parts
+                and "\\" not in path
+            ):
                 static_root = _STATIC_DIR.resolve()
                 candidate = (static_root / normalized).resolve()
                 try:
@@ -1533,7 +1625,10 @@ def _acquire_pid_lock() -> bool:
                 try:
                     os.kill(stale_pid, 0)
                     # Process exists — refuse to start a second instance.
-                    log.warning("Backend already running with PID %s; refusing to start duplicate.", stale_pid)
+                    log.warning(
+                        "Backend already running with PID %s; refusing to start duplicate.",
+                        stale_pid,
+                    )
                     return False
                 except OSError:
                     # Stale PID file — the process no longer exists.
@@ -1549,7 +1644,10 @@ def _acquire_pid_lock() -> bool:
 def _release_pid_lock() -> None:
     pid_path = _pid_file_path()
     try:
-        if pid_path.exists() and int(pid_path.read_text(encoding="utf-8").strip()) == os.getpid():
+        if (
+            pid_path.exists()
+            and int(pid_path.read_text(encoding="utf-8").strip()) == os.getpid()
+        ):
             pid_path.unlink()
     except Exception:
         pass

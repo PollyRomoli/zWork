@@ -3,6 +3,7 @@
 Provides MilestoneTracker for emitting meaningful progress updates
 instead of streaming every line of output.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -16,6 +17,7 @@ from typing import AsyncIterator
 @dataclass
 class Milestone:
     """A progress milestone for a long-running operation."""
+
     label: str
     fraction: float  # 0.0 to 1.0
     emit: bool = True  # Whether to emit this milestone to the UI
@@ -24,6 +26,7 @@ class Milestone:
 @dataclass
 class StreamedTool:
     """Base class for tools that emit streaming progress."""
+
     tool_id: str
     label: str
     icon: str = "tool"
@@ -82,9 +85,7 @@ class MilestoneTracker(StreamedTool):
             self.current_index = self.milestones.index(milestone)
 
             if milestone.emit and self.should_emit():
-                yield self.progress_event(
-                    f"{self.label}: {milestone.label}"
-                )
+                yield self.progress_event(f"{self.label}: {milestone.label}")
 
             # Yield control back to the event loop
             await asyncio.sleep(0)
@@ -193,12 +194,11 @@ async def stream_batch_read(
     results = []
     for i, path in enumerate(paths):
         if tracker.should_emit():
-            yield tracker.progress_event(
-                f"{label}: {i + 1}/{total}"
-            )
+            yield tracker.progress_event(f"{label}: {i + 1}/{total}")
 
         # Read the file
         from .tools import _read_file
+
         try:
             content = await asyncio.to_thread(_read_file, path)
             results.append({"path": path, "content": content, "ok": True})

@@ -8,6 +8,7 @@ Detected only (presence/status, no credential reuse yet):
   - GitHub Copilot    (`~/.config/github-copilot/`)
   - MLX local runtime (`mlx_lm.server`, Apple Silicon only)
 """
+
 from __future__ import annotations
 
 import json
@@ -75,7 +76,9 @@ def _codex() -> Integration:
 def _copilot() -> Integration:
     d = Path("~/.config/github-copilot").expanduser()
     present = d.exists() and d.is_dir()
-    detail = "Installed (Copilot tokens are not reusable for chat API)" if present else ""
+    detail = (
+        "Installed (Copilot tokens are not reusable for chat API)" if present else ""
+    )
     return Integration(
         id="github_copilot",
         name="GitHub Copilot",
@@ -154,6 +157,8 @@ def read_claude_code_model() -> str | None:
 
 def env_anthropic_credentials() -> tuple[str | None, str | None]:
     """Return (token, base_url) from current process env (already-exported vars)."""
-    token = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")
+    token = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get(
+        "ANTHROPIC_API_KEY"
+    )
     base = os.environ.get("ANTHROPIC_BASE_URL")
     return token, base

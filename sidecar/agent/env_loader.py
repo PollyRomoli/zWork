@@ -1,4 +1,5 @@
 """Tiny .env loader used at backend startup. Optional, non-fatal."""
+
 from __future__ import annotations
 
 import os

@@ -4,6 +4,7 @@ A project is a container for context (project.md) and associated conversations.
 Projects live in ~/.zwork/projects/<id>/ with a project.json metadata file
 and an optional project.md context file.
 """
+
 from __future__ import annotations
 
 import json
@@ -84,6 +85,7 @@ def delete(project_id: str) -> bool:
     if not (d / "project.json").exists():
         return False
     import shutil
+
     shutil.rmtree(d, ignore_errors=True)
     return True
 

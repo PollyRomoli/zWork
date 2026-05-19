@@ -7,6 +7,7 @@ Supports two modes:
 Each subagent runs in its own async task with its own message context.
 Results are streamed back to the main agent loop.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -20,6 +21,7 @@ from .runtime import current_run, RunContext
 @dataclass
 class SubagentTask:
     """A task assigned to a subagent."""
+
     id: str
     description: str
     parent_run_id: str
@@ -33,6 +35,7 @@ class SubagentTask:
 @dataclass
 class SubagentContext:
     """Context for a running subagent."""
+
     task_id: str
     run_context: RunContext
     result_queue: asyncio.Queue[dict]
@@ -139,38 +142,46 @@ class SubagentSpawner:
                     # Forward progress events
                     if evt.get("type") == "delta":
                         full_result.append(evt.get("text", ""))
-                        await result_queue.put({
-                            "type": "subagent_delta",
-                            "task_id": task_id,
-                            "text": evt.get("text", ""),
-                        })
+                        await result_queue.put(
+                            {
+                                "type": "subagent_delta",
+                                "task_id": task_id,
+                                "text": evt.get("text", ""),
+                            }
+                        )
                     elif evt.get("type") in ("activity", "status"):
-                        await result_queue.put({
-                            "type": "subagent_activity",
-                            "task_id": task_id,
-                            "event": evt,
-                        })
+                        await result_queue.put(
+                            {
+                                "type": "subagent_activity",
+                                "task_id": task_id,
+                                "event": evt,
+                            }
+                        )
 
                 result = "".join(full_result)
                 task.status = "completed"
                 task.result = result
                 task.completed_at = asyncio.get_running_loop().time()
 
-                await result_queue.put({
-                    "type": "subagent_done",
-                    "task_id": task_id,
-                    "result": result,
-                })
+                await result_queue.put(
+                    {
+                        "type": "subagent_done",
+                        "task_id": task_id,
+                        "result": result,
+                    }
+                )
 
             except Exception as e:
                 task.status = "failed"
                 task.error = str(e)
                 task.completed_at = asyncio.get_running_loop().time()
-                await result_queue.put({
-                    "type": "subagent_done",
-                    "task_id": task_id,
-                    "error": str(e),
-                })
+                await result_queue.put(
+                    {
+                        "type": "subagent_done",
+                        "task_id": task_id,
+                        "error": str(e),
+                    }
+                )
 
         # Start the subagent task
         asyncio.create_task(run_subagent())
@@ -192,6 +203,7 @@ class SubagentSpawner:
 
         Yields events from all subagents as they complete.
         """
+
         # Create all tasks first
         async def run_single(desc: str, msgs: list[dict[str, Any]]):
             async for evt in self.spawn(desc, msgs, model_id, plan_mode):
@@ -199,6 +211,7 @@ class SubagentSpawner:
 
         # Run all subagents concurrently using TaskGroup
         async with asyncio.TaskGroup() as tg:
+
             async def collect_task(desc: str, msgs: list[dict[str, Any]]):
                 async for evt in run_single(desc, msgs):
                     yield evt

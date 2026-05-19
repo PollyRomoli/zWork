@@ -12,6 +12,7 @@ Models are user-defined `CustomModel` entries, each pointing at a credential
 source (`anthropic` | `openai` | `claude_code` | `zwork_router`), a real `model_id` to send
 to that API, and an optional per-model base URL override.
 """
+
 from __future__ import annotations
 
 import json
@@ -354,11 +355,11 @@ KNOWN_CREDENTIALS: tuple[str, ...] = (
 
 @dataclass
 class CustomModel:
-    id: str              # zWork-local id (slug)
-    name: str            # display name
-    shape: str           # "anthropic" | "openai" — how to talk to the API
-    credential: str      # one of KNOWN_CREDENTIALS
-    model_id: str        # model id to send in the request
+    id: str  # zWork-local id (slug)
+    name: str  # display name
+    shape: str  # "anthropic" | "openai" — how to talk to the API
+    credential: str  # one of KNOWN_CREDENTIALS
+    model_id: str  # model id to send in the request
     base_url_override: str = ""  # optional; overrides the credential's base_url
 
 
@@ -388,11 +389,11 @@ def load() -> Settings:
         return Settings()
     telemetry_raw = data.get("telemetry_enabled")
     raw_api_keys = {
-        k: str(v)
-        for k, v in (data.get("api_keys") or {}).items()
-        if isinstance(k, str)
+        k: str(v) for k, v in (data.get("api_keys") or {}).items() if isinstance(k, str)
     }
-    credential_names = raw_api_keys or {credential: "" for credential in KNOWN_CREDENTIALS}
+    credential_names = raw_api_keys or {
+        credential: "" for credential in KNOWN_CREDENTIALS
+    }
     api_keys = secretstore.load_api_keys(credential_names)
     placeholders = {k: "" for k, v in api_keys.items() if v}
     if raw_api_keys and raw_api_keys != placeholders:
@@ -407,7 +408,9 @@ def load() -> Settings:
             pass
     return Settings(
         api_keys=api_keys or placeholders,
-        provider_config={k: dict(v) for k, v in (data.get("provider_config") or {}).items()},
+        provider_config={
+            k: dict(v) for k, v in (data.get("provider_config") or {}).items()
+        },
         default_model=str(data.get("default_model") or ""),
         use_claude_code_config=bool(data.get("use_claude_code_config", True)),
         telemetry_enabled=True if telemetry_raw is None else bool(telemetry_raw),
@@ -422,7 +425,9 @@ def save(settings: Settings) -> None:
     placeholders = secretstore.persist_api_keys(settings.api_keys)
     p = settings_path()
     data = asdict(settings)
-    data["api_keys"] = placeholders or {k: "" for k, v in settings.api_keys.items() if v}
+    data["api_keys"] = placeholders or {
+        k: "" for k, v in settings.api_keys.items() if v
+    }
     p.write_text(json.dumps(data, indent=2), encoding="utf-8")
     try:
         os.chmod(p, 0o600)
@@ -451,6 +456,7 @@ def public_view(settings: Settings) -> dict[str, Any]:
 
 # ---------- Custom model CRUD helpers ----------
 
+
 def upsert_custom_model(
     settings: Settings,
     *,
@@ -464,9 +470,7 @@ def upsert_custom_model(
     if shape not in (Shape.ANTHROPIC, Shape.OPENAI):
         raise ValueError("shape must be 'anthropic' or 'openai'")
     if credential not in KNOWN_CREDENTIALS:
-        raise ValueError(
-            "credential must be one of: " + ", ".join(KNOWN_CREDENTIALS)
-        )
+        raise ValueError("credential must be one of: " + ", ".join(KNOWN_CREDENTIALS))
     model = CustomModel(
         id=(id or _slugify(name) or _slugify(model_id)),
         name=name or model_id,
@@ -488,5 +492,7 @@ def upsert_custom_model(
 
 def remove_custom_model(settings: Settings, model_id: str) -> bool:
     before = len(settings.custom_models)
-    settings.custom_models = [m for m in settings.custom_models if m.get("id") != model_id]
+    settings.custom_models = [
+        m for m in settings.custom_models if m.get("id") != model_id
+    ]
     return len(settings.custom_models) != before

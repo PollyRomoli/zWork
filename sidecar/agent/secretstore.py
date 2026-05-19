@@ -10,6 +10,7 @@ Fallback:
 `settings.json` only keeps credential names as presence markers. The actual
 secret values live in the store selected here.
 """
+
 from __future__ import annotations
 
 import json

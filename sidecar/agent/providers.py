@@ -15,6 +15,7 @@ The harness:
   into the next turn.
 - Loops until the model stops calling tools or we hit MAX_TURNS.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -36,7 +37,13 @@ from .compaction import (
 )
 from .projects import get as project_get
 from .runtime import RunContext, run_scope
-from .tools import TOOL_SCHEMAS, execute_tool, filter_tools_for_plan_mode, parse_tool_calls, tool_risk
+from .tools import (
+    TOOL_SCHEMAS,
+    execute_tool,
+    filter_tools_for_plan_mode,
+    parse_tool_calls,
+    tool_risk,
+)
 from .subagent import SubagentSpawner
 
 
@@ -106,12 +113,13 @@ def _supports_anthropic_cache(base_url: str) -> bool:
 
 # ---------------- Credential resolution ----------------
 
+
 @dataclass
 class Credentials:
-    shape: str            # "anthropic" | "openai"
+    shape: str  # "anthropic" | "openai"
     api_key: str
     base_url: str
-    source: str           # "byok" | "claude_code" | "env"
+    source: str  # "byok" | "claude_code" | "env"
 
 
 # OpenAI-compatible providers with first-class credential slots.
@@ -150,9 +158,8 @@ def _shape_for_credential(credential: str) -> str:
 
 def _is_local_ollama_base(url: str) -> bool:
     base = (url or "").strip().rstrip("/")
-    return (
-        base.startswith("http://localhost:11434")
-        or base.startswith("http://127.0.0.1:11434")
+    return base.startswith("http://localhost:11434") or base.startswith(
+        "http://127.0.0.1:11434"
     )
 
 
@@ -163,6 +170,7 @@ def is_safe_ollama_url(url: str) -> bool:
     """
     from urllib.parse import urlparse
     import ipaddress
+
     try:
         p = urlparse(url)
         if not p.scheme or p.scheme not in ("http", "https"):
@@ -180,23 +188,33 @@ def is_safe_ollama_url(url: str) -> bool:
         return False
 
 
-def resolve(credential: str, s: settings_mod.Settings, override_base_url: str = "") -> Optional[Credentials]:
+def resolve(
+    credential: str, s: settings_mod.Settings, override_base_url: str = ""
+) -> Optional[Credentials]:
     shape = _shape_for_credential(credential)
 
     if credential == "anthropic":
         key = (s.api_keys.get("anthropic") or "").strip()
         if key:
-            base = override_base_url or (s.provider_config.get("anthropic", {}).get("base_url")
-                                         or "https://api.anthropic.com")
+            base = override_base_url or (
+                s.provider_config.get("anthropic", {}).get("base_url")
+                or "https://api.anthropic.com"
+            )
             return Credentials("anthropic", key, base.rstrip("/"), "byok")
-        tok = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get("ANTHROPIC_API_KEY")
+        tok = os.environ.get("ANTHROPIC_AUTH_TOKEN") or os.environ.get(
+            "ANTHROPIC_API_KEY"
+        )
         if tok:
-            base = override_base_url or (os.environ.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com")
+            base = override_base_url or (
+                os.environ.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
+            )
             return Credentials("anthropic", tok, base.rstrip("/"), "env")
         return None
 
     if credential == "openai":
-        configured_base = (s.provider_config.get("openai", {}).get("base_url") or "").strip()
+        configured_base = (
+            s.provider_config.get("openai", {}).get("base_url") or ""
+        ).strip()
         selected_base = (override_base_url or configured_base).strip()
 
         key = (s.api_keys.get("openai") or "").strip()
@@ -210,7 +228,9 @@ def resolve(credential: str, s: settings_mod.Settings, override_base_url: str = 
 
         env = os.environ.get("OPENAI_API_KEY")
         if env:
-            base = selected_base or (os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1")
+            base = selected_base or (
+                os.environ.get("OPENAI_BASE_URL") or "https://api.openai.com/v1"
+            )
             return Credentials("openai", env, base.rstrip("/"), "env")
 
         # Allow local Ollama-compatible setups without auth token.
@@ -226,12 +246,16 @@ def resolve(credential: str, s: settings_mod.Settings, override_base_url: str = 
         env = detect.read_claude_code_env()
         tok = env.get("ANTHROPIC_AUTH_TOKEN") or env.get("ANTHROPIC_API_KEY")
         if tok:
-            base = override_base_url or (env.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com")
+            base = override_base_url or (
+                env.get("ANTHROPIC_BASE_URL") or "https://api.anthropic.com"
+            )
             return Credentials("anthropic", tok, base.rstrip("/"), "claude_code")
         return None
 
     if credential == "zwork_router":
-        token = (s.api_keys.get("zwork_router") or s.api_keys.get("openai") or "").strip()
+        token = (
+            s.api_keys.get("zwork_router") or s.api_keys.get("openai") or ""
+        ).strip()
         if not token:
             token = (os.environ.get("ZWORK_GATEWAY_TOKEN") or "").strip()
         if token:
@@ -270,7 +294,13 @@ def resolve(credential: str, s: settings_mod.Settings, override_base_url: str = 
 
 def credential_status(s: settings_mod.Settings) -> dict:
     out: dict[str, dict] = {}
-    sources = ("anthropic", "openai", "claude_code", "zwork_router", *OPENAI_COMPAT_PROVIDERS.keys())
+    sources = (
+        "anthropic",
+        "openai",
+        "claude_code",
+        "zwork_router",
+        *OPENAI_COMPAT_PROVIDERS.keys(),
+    )
     for src in sources:
         c = resolve(src, s)
         out[src] = {
@@ -284,6 +314,7 @@ def credential_status(s: settings_mod.Settings) -> dict:
 
 # ---------------- Dynamic model list ----------------
 
+
 def available_models(s: settings_mod.Settings) -> list[dict]:
     out: list[dict] = []
 
@@ -292,30 +323,34 @@ def available_models(s: settings_mod.Settings) -> list[dict]:
         existing = any(m.get("credential") == "claude_code" for m in s.custom_models)
         if not existing:
             cc_model = detect.read_claude_code_model() or ""
-            out.append({
-                "id": "__claude_code__",
-                "name": "Local credentials",
-                "subtitle": f"via {cc.base_url}",
-                "shape": "anthropic",
-                "credential": "claude_code",
-                "model_id": cc_model or "(default)",
-                "configured": True,
-                "synthesized": True,
-            })
+            out.append(
+                {
+                    "id": "__claude_code__",
+                    "name": "Local credentials",
+                    "subtitle": f"via {cc.base_url}",
+                    "shape": "anthropic",
+                    "credential": "claude_code",
+                    "model_id": cc_model or "(default)",
+                    "configured": True,
+                    "synthesized": True,
+                }
+            )
 
     for m in s.custom_models:
         cred = resolve(m.get("credential", ""), s, m.get("base_url_override", ""))
-        out.append({
-            "id": m["id"],
-            "name": m.get("name") or m["id"],
-            "subtitle": _subtitle_for(m, cred),
-            "shape": m.get("shape", "anthropic"),
-            "credential": m.get("credential", ""),
-            "model_id": m.get("model_id", ""),
-            "base_url_override": m.get("base_url_override", ""),
-            "configured": bool(cred),
-            "synthesized": False,
-        })
+        out.append(
+            {
+                "id": m["id"],
+                "name": m.get("name") or m["id"],
+                "subtitle": _subtitle_for(m, cred),
+                "shape": m.get("shape", "anthropic"),
+                "credential": m.get("credential", ""),
+                "model_id": m.get("model_id", ""),
+                "base_url_override": m.get("base_url_override", ""),
+                "configured": bool(cred),
+                "synthesized": False,
+            }
+        )
     return out
 
 
@@ -345,8 +380,11 @@ def lookup_model(zwork_model_id: str, s: settings_mod.Settings) -> Optional[dict
 
 # ---------------- Anthropic tool schemas (from tools module) ----------------
 
+
 def _active_tool_schemas(plan_mode: bool) -> list[dict]:
-    schemas = filter_tools_for_plan_mode(TOOL_SCHEMAS) if plan_mode else list(TOOL_SCHEMAS)
+    schemas = (
+        filter_tools_for_plan_mode(TOOL_SCHEMAS) if plan_mode else list(TOOL_SCHEMAS)
+    )
     if plan_mode:
         return schemas
     try:
@@ -368,29 +406,34 @@ def _anthropic_tools(plan_mode: bool = False) -> list[dict]:
     """Convert our generic TOOL_SCHEMAS into Anthropic's input_schema shape."""
     out = []
     for t in _active_tool_schemas(plan_mode):
-        out.append({
-            "name": t["name"],
-            "description": t["description"],
-            "input_schema": t["parameters"],
-        })
+        out.append(
+            {
+                "name": t["name"],
+                "description": t["description"],
+                "input_schema": t["parameters"],
+            }
+        )
     return out
 
 
 def _openai_tools(plan_mode: bool = False) -> list[dict]:
     out = []
     for t in _active_tool_schemas(plan_mode):
-        out.append({
-            "type": "function",
-            "function": {
-                "name": t["name"],
-                "description": t["description"],
-                "parameters": t["parameters"],
-            },
-        })
+        out.append(
+            {
+                "type": "function",
+                "function": {
+                    "name": t["name"],
+                    "description": t["description"],
+                    "parameters": t["parameters"],
+                },
+            }
+        )
     return out
 
 
 # ---------------- Anthropic streaming turn ----------------
+
 
 async def _anthropic_turn(
     creds: Credentials,
@@ -420,7 +463,9 @@ async def _anthropic_turn(
         headers.update(extra_headers)
 
     if _supports_anthropic_cache(creds.base_url):
-        system_blocks, tools_blocks = _apply_anthropic_cache(system, _anthropic_tools(plan_mode))
+        system_blocks, tools_blocks = _apply_anthropic_cache(
+            system, _anthropic_tools(plan_mode)
+        )
     else:
         system_blocks = [{"type": "text", "text": system}] if system else []
         tools_blocks = _anthropic_tools(plan_mode)
@@ -448,12 +493,18 @@ async def _anthropic_turn(
     }
 
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=20.0)) as client:
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(300.0, connect=20.0)
+        ) as client:
             async with client.stream("POST", url, json=body, headers=headers) as resp:
                 if resp.status_code >= 400:
                     text = (await resp.aread()).decode("utf-8", errors="replace")
                     yield {"type": "error", "text": f"{resp.status_code}: {text[:500]}"}
-                    yield {"type": "turn_end", "content_blocks": [], "stop_reason": "error"}
+                    yield {
+                        "type": "turn_end",
+                        "content_blocks": [],
+                        "stop_reason": "error",
+                    }
                     return
                 router_provider = resp.headers.get("x-zwork-router-provider") or ""
                 router_model = resp.headers.get("x-zwork-router-model") or model_id
@@ -524,7 +575,9 @@ async def _anthropic_turn(
                             block["thinking"] += delta.get("thinking", "")
                         elif dtype == "signature_delta" and block["type"] == "thinking":
                             block["signature"] += delta.get("signature", "")
-                        elif dtype == "input_json_delta" and block["type"] == "tool_use":
+                        elif (
+                            dtype == "input_json_delta" and block["type"] == "tool_use"
+                        ):
                             block["input_buf"] += delta.get("partial_json", "")
 
                     elif et == "content_block_stop":
@@ -559,12 +612,22 @@ async def _anthropic_turn(
                         break
 
                     elif et == "error":
-                        yield {"type": "error", "text": json.dumps(evt.get("error") or evt)}
-                        yield {"type": "turn_end", "content_blocks": [], "stop_reason": "error"}
+                        yield {
+                            "type": "error",
+                            "text": json.dumps(evt.get("error") or evt),
+                        }
+                        yield {
+                            "type": "turn_end",
+                            "content_blocks": [],
+                            "stop_reason": "error",
+                        }
                         return
 
     except httpx.HTTPError as e:
-        yield {"type": "error", "text": f"network error: could not reach {creds.base_url} ({e})"}
+        yield {
+            "type": "error",
+            "text": f"network error: could not reach {creds.base_url} ({e})",
+        }
         yield {"type": "turn_end", "content_blocks": [], "stop_reason": "error"}
         return
 
@@ -580,16 +643,22 @@ async def _anthropic_turn(
                 thinking_block["signature"] = b["signature"]
             final_blocks.append(thinking_block)
         elif b["type"] == "tool_use":
-            final_blocks.append({
-                "type": "tool_use",
-                "id": b.get("id", ""),
-                "name": b.get("name", ""),
-                "input": b.get("input", {}),
-            })
+            final_blocks.append(
+                {
+                    "type": "tool_use",
+                    "id": b.get("id", ""),
+                    "name": b.get("name", ""),
+                    "input": b.get("input", {}),
+                }
+            )
 
     # Surface usage so the UI can display per-turn cost / cache behavior.
     yield {"type": "usage", "usage": dict(usage)}
-    yield {"type": "turn_end", "content_blocks": final_blocks, "stop_reason": stop_reason}
+    yield {
+        "type": "turn_end",
+        "content_blocks": final_blocks,
+        "stop_reason": stop_reason,
+    }
 
 
 # ---------------- OpenAI streaming turn ----------------
@@ -621,7 +690,7 @@ def _openai_retry_delay(attempt: int, server_hint: Optional[float]) -> float:
     """
     if server_hint is not None:
         return min(_OPENAI_RETRY_CAP_SECONDS, max(0.5, server_hint))
-    backoff = 1.5 * (2 ** attempt) + random.uniform(0, 0.5)
+    backoff = 1.5 * (2**attempt) + random.uniform(0, 0.5)
     return min(_OPENAI_RETRY_CAP_SECONDS, max(0.5, backoff))
 
 
@@ -661,11 +730,20 @@ async def _openai_turn(
     for attempt in range(_OPENAI_MAX_ATTEMPTS):
         is_last_attempt = attempt >= _OPENAI_MAX_ATTEMPTS - 1
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(300.0, connect=20.0)) as client:
-                async with client.stream("POST", url, json=body, headers=headers) as resp:
+            async with httpx.AsyncClient(
+                timeout=httpx.Timeout(300.0, connect=20.0)
+            ) as client:
+                async with client.stream(
+                    "POST", url, json=body, headers=headers
+                ) as resp:
                     if resp.status_code == 429 and not is_last_attempt:
-                        server_hint = _parse_retry_after_seconds(resp.headers.get("retry-after", ""))
-                        if server_hint is not None and server_hint > _OPENAI_RETRY_CAP_SECONDS:
+                        server_hint = _parse_retry_after_seconds(
+                            resp.headers.get("retry-after", "")
+                        )
+                        if (
+                            server_hint is not None
+                            and server_hint > _OPENAI_RETRY_CAP_SECONDS
+                        ):
                             await resp.aread()
                             yield {
                                 "type": "error",
@@ -675,7 +753,11 @@ async def _openai_turn(
                                     f"or switch provider in Settings."
                                 ),
                             }
-                            yield {"type": "turn_end", "content_blocks": [], "stop_reason": "error"}
+                            yield {
+                                "type": "turn_end",
+                                "content_blocks": [],
+                                "stop_reason": "error",
+                            }
                             return
                         delay = _openai_retry_delay(attempt, server_hint)
                         await resp.aread()
@@ -693,19 +775,29 @@ async def _openai_turn(
                                 "Provider is rate-limited (queue_exceeded). "
                                 "Try again in a minute, or switch provider in Settings."
                             )
-                        elif resp.status_code == 401 and "api.tryzwork.app" in creds.base_url.lower():
+                        elif (
+                            resp.status_code == 401
+                            and "api.tryzwork.app" in creds.base_url.lower()
+                        ):
                             detail = (
                                 "401 unauthorized from zWork Router. "
                                 "Sign in again or reactivate managed mode from Analytics."
                             )
-                        elif resp.status_code == 401 and "ollama" in creds.base_url.lower():
+                        elif (
+                            resp.status_code == 401
+                            and "ollama" in creds.base_url.lower()
+                        ):
                             detail = (
                                 "401 unauthorized from Ollama endpoint. "
                                 "If using ollama.com cloud, set a valid API key; "
                                 "for local Ollama use http://localhost:11434/v1 with no key."
                             )
                         yield {"type": "error", "text": f"{resp.status_code}: {detail}"}
-                        yield {"type": "turn_end", "content_blocks": [], "stop_reason": "error"}
+                        yield {
+                            "type": "turn_end",
+                            "content_blocks": [],
+                            "stop_reason": "error",
+                        }
                         return
                     router_provider = resp.headers.get("x-zwork-router-provider") or ""
                     router_model = resp.headers.get("x-zwork-router-model") or model_id
@@ -732,7 +824,9 @@ async def _openai_turn(
                             continue
                         ch = choices[0]
                         delta = ch.get("delta") or {}
-                        thinking_piece = delta.get("reasoning_content") or delta.get("reasoning")
+                        thinking_piece = delta.get("reasoning_content") or delta.get(
+                            "reasoning"
+                        )
                         if thinking_piece:
                             reasoning_content += thinking_piece
                         piece = delta.get("content")
@@ -742,9 +836,11 @@ async def _openai_turn(
                                 yield {"type": "status", "text": "Drafting"}
                                 started_text = True
                             yield {"type": "delta", "text": piece}
-                        for tc in (delta.get("tool_calls") or []):
+                        for tc in delta.get("tool_calls") or []:
                             idx = tc.get("index", 0)
-                            slot = tool_calls.setdefault(idx, {"id": "", "name": "", "args_buf": ""})
+                            slot = tool_calls.setdefault(
+                                idx, {"id": "", "name": "", "args_buf": ""}
+                            )
                             if tc.get("id"):
                                 slot["id"] = tc["id"]
                             fn = tc.get("function") or {}
@@ -763,13 +859,18 @@ async def _openai_turn(
                             finish_reason = ch["finish_reason"]
             break
         except httpx.HTTPError as e:
-            yield {"type": "error", "text": f"network error: could not reach {creds.base_url} ({e})"}
+            yield {
+                "type": "error",
+                "text": f"network error: could not reach {creds.base_url} ({e})",
+            }
             yield {"type": "turn_end", "content_blocks": [], "stop_reason": "error"}
             return
 
     final_blocks: list[dict] = []
     if reasoning_content:
-        final_blocks.append({"type": "reasoning_content", "reasoning_content": reasoning_content})
+        final_blocks.append(
+            {"type": "reasoning_content", "reasoning_content": reasoning_content}
+        )
     if collected_text:
         final_blocks.append({"type": "text", "text": collected_text})
     for idx in sorted(tool_calls.keys()):
@@ -778,17 +879,24 @@ async def _openai_turn(
             inp = json.loads(tc["args_buf"] or "{}")
         except json.JSONDecodeError:
             inp = {}
-        final_blocks.append({
-            "type": "tool_use",
-            "id": tc["id"] or f"tc_{idx}",
-            "name": tc["name"],
-            "input": inp,
-        })
+        final_blocks.append(
+            {
+                "type": "tool_use",
+                "id": tc["id"] or f"tc_{idx}",
+                "name": tc["name"],
+                "input": inp,
+            }
+        )
 
-    yield {"type": "turn_end", "content_blocks": final_blocks, "stop_reason": finish_reason}
+    yield {
+        "type": "turn_end",
+        "content_blocks": final_blocks,
+        "stop_reason": finish_reason,
+    }
 
 
 # ---------------- Agentic harness ----------------
+
 
 def _build_system_prompt(
     base_system: str,
@@ -871,11 +979,11 @@ async def stream_chat(
     if creds is None:
         yield {
             "type": "error",
-                "text": (
-                    f"No credentials for '{model['credential']}'. "
-                    "Add an API key in Settings → Credentials, or enable local credential reuse."
-                ),
-            }
+            "text": (
+                f"No credentials for '{model['credential']}'. "
+                "Add an API key in Settings → Credentials, or enable local credential reuse."
+            ),
+        }
         yield {"type": "done"}
         return
 
@@ -887,7 +995,9 @@ async def stream_chat(
         yield {"type": "done"}
         return
 
-    ctx = run_ctx or RunContext(run_id=str(uuid.uuid4()), chat_id="", requested_model_id=zwork_model_id)
+    ctx = run_ctx or RunContext(
+        run_id=str(uuid.uuid4()), chat_id="", requested_model_id=zwork_model_id
+    )
     ctx.resolved_model_id = real_model_id
 
     # Initialize subagent spawner and attach to context
@@ -944,7 +1054,9 @@ async def stream_chat(
     async with run_scope(ctx):
         ctx.provider_base_url = creds.base_url
         ctx.provider_source = creds.source
-        ctx.log("provider_resolved", credential=model["credential"], shape=model["shape"])
+        ctx.log(
+            "provider_resolved", credential=model["credential"], shape=model["shape"]
+        )
 
         if model["shape"] == "anthropic":
             base_system, convo = _anthropic_convert_input_messages(messages)
@@ -1044,9 +1156,15 @@ async def _run_anthropic_loop(
         stop_reason: Optional[str] = None
         request_kind = "root" if turn == 0 else "continuation"
         run_ctx.turn_index = turn
-        run_ctx.log("provider_turn_started", request_kind=request_kind, provider_shape="anthropic")
+        run_ctx.log(
+            "provider_turn_started",
+            request_kind=request_kind,
+            provider_shape="anthropic",
+        )
         try:
-            async with asyncio.timeout(min(run_ctx.turn_timeout_seconds, run_ctx.remaining_run_seconds())):
+            async with asyncio.timeout(
+                min(run_ctx.turn_timeout_seconds, run_ctx.remaining_run_seconds())
+            ):
                 async for evt in _anthropic_turn(
                     creds,
                     convo,
@@ -1067,29 +1185,48 @@ async def _run_anthropic_loop(
                     yield evt
         except TimeoutError:
             run_ctx.last_error = "Provider turn timed out."
-            run_ctx.log("provider_turn_failed", request_kind=request_kind, error=run_ctx.last_error)
+            run_ctx.log(
+                "provider_turn_failed",
+                request_kind=request_kind,
+                error=run_ctx.last_error,
+            )
             yield {"type": "error", "text": run_ctx.last_error}
             yield {"type": "done"}
             return
         except asyncio.CancelledError:
             run_ctx.last_error = "Provider turn cancelled."
-            run_ctx.log("provider_turn_failed", request_kind=request_kind, error=run_ctx.last_error)
+            run_ctx.log(
+                "provider_turn_failed",
+                request_kind=request_kind,
+                error=run_ctx.last_error,
+            )
             raise
         except Exception as e:
             run_ctx.last_error = f"Provider turn failed: {e}"
-            run_ctx.log("provider_turn_failed", request_kind=request_kind, error=run_ctx.last_error)
+            run_ctx.log(
+                "provider_turn_failed",
+                request_kind=request_kind,
+                error=run_ctx.last_error,
+            )
             yield {"type": "error", "text": run_ctx.last_error}
             yield {"type": "done"}
             return
 
         # Also scan text for legacy <<TOOL>> blocks as a fallback
-        all_text = "".join(b.get("text", "") for b in content_blocks if b.get("type") == "text")
+        all_text = "".join(
+            b.get("text", "") for b in content_blocks if b.get("type") == "text"
+        )
         legacy_calls = parse_tool_calls(all_text) if all_text else []
 
         tool_use_blocks = [b for b in content_blocks if b.get("type") == "tool_use"]
 
         if not tool_use_blocks and not legacy_calls:
-            run_ctx.log("provider_turn_finished", request_kind=request_kind, stop_reason=stop_reason or "end", tool_calls=0)
+            run_ctx.log(
+                "provider_turn_finished",
+                request_kind=request_kind,
+                stop_reason=stop_reason or "end",
+                tool_calls=0,
+            )
             yield {"type": "done"}
             return
 
@@ -1104,12 +1241,14 @@ async def _run_anthropic_loop(
             if b["type"] == "text" and b.get("text"):
                 assistant_content.append({"type": "text", "text": b["text"]})
             elif b["type"] == "tool_use":
-                assistant_content.append({
-                    "type": "tool_use",
-                    "id": b["id"],
-                    "name": b["name"],
-                    "input": b["input"],
-                })
+                assistant_content.append(
+                    {
+                        "type": "tool_use",
+                        "id": b["id"],
+                        "name": b["name"],
+                        "input": b["input"],
+                    }
+                )
         if assistant_content:
             convo.append({"role": "assistant", "content": assistant_content})
 
@@ -1138,12 +1277,14 @@ async def _run_anthropic_loop(
                 ok = False
                 result_text = f"Tool '{name}' failed: {e}"
                 yield {"type": "error", "text": result_text}
-            tool_result_content.append({
-                "type": "tool_result",
-                "tool_use_id": b["id"],
-                "content": result_text or ("ok" if ok else "failed"),
-                "is_error": not ok,
-            })
+            tool_result_content.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": b["id"],
+                    "content": result_text or ("ok" if ok else "failed"),
+                    "is_error": not ok,
+                }
+            )
 
         # Execute legacy <<TOOL>> calls too (fold results as user text)
         legacy_results: list[str] = []
@@ -1170,7 +1311,9 @@ async def _run_anthropic_loop(
         # Build the next user turn (tool results)
         next_user_parts: list[dict] = list(tool_result_content)
         if legacy_results:
-            next_user_parts.append({"type": "text", "text": "\n\n".join(legacy_results)})
+            next_user_parts.append(
+                {"type": "text", "text": "\n\n".join(legacy_results)}
+            )
         if next_user_parts:
             convo.append({"role": "user", "content": next_user_parts})
         run_ctx.log(
@@ -1202,9 +1345,13 @@ async def _run_openai_loop(
         content_blocks: list[dict] = []
         request_kind = "root" if turn == 0 else "continuation"
         run_ctx.turn_index = turn
-        run_ctx.log("provider_turn_started", request_kind=request_kind, provider_shape="openai")
+        run_ctx.log(
+            "provider_turn_started", request_kind=request_kind, provider_shape="openai"
+        )
         try:
-            async with asyncio.timeout(min(run_ctx.turn_timeout_seconds, run_ctx.remaining_run_seconds())):
+            async with asyncio.timeout(
+                min(run_ctx.turn_timeout_seconds, run_ctx.remaining_run_seconds())
+            ):
                 async for evt in _openai_turn(
                     creds,
                     messages,
@@ -1222,17 +1369,29 @@ async def _run_openai_loop(
                     yield evt
         except TimeoutError:
             run_ctx.last_error = "Provider turn timed out."
-            run_ctx.log("provider_turn_failed", request_kind=request_kind, error=run_ctx.last_error)
+            run_ctx.log(
+                "provider_turn_failed",
+                request_kind=request_kind,
+                error=run_ctx.last_error,
+            )
             yield {"type": "error", "text": run_ctx.last_error}
             yield {"type": "done"}
             return
         except asyncio.CancelledError:
             run_ctx.last_error = "Provider turn cancelled."
-            run_ctx.log("provider_turn_failed", request_kind=request_kind, error=run_ctx.last_error)
+            run_ctx.log(
+                "provider_turn_failed",
+                request_kind=request_kind,
+                error=run_ctx.last_error,
+            )
             raise
         except Exception as e:
             run_ctx.last_error = f"Provider turn failed: {e}"
-            run_ctx.log("provider_turn_failed", request_kind=request_kind, error=run_ctx.last_error)
+            run_ctx.log(
+                "provider_turn_failed",
+                request_kind=request_kind,
+                error=run_ctx.last_error,
+            )
             yield {"type": "error", "text": run_ctx.last_error}
             yield {"type": "done"}
             return
@@ -1242,7 +1401,12 @@ async def _run_openai_loop(
         legacy_calls = parse_tool_calls(text) if text else []
 
         if not tool_uses and not legacy_calls:
-            run_ctx.log("provider_turn_finished", request_kind=request_kind, stop_reason="end", tool_calls=0)
+            run_ctx.log(
+                "provider_turn_finished",
+                request_kind=request_kind,
+                stop_reason="end",
+                tool_calls=0,
+            )
             yield {"type": "done"}
             return
 
@@ -1263,12 +1427,18 @@ async def _run_openai_loop(
             }
             for tu in tool_uses
         ]
-        messages.append({
-            "role": "assistant",
-            "content": text or "",
-            **({"reasoning_content": reasoning_content} if reasoning_content else {}),
-            **({"tool_calls": openai_tool_calls} if openai_tool_calls else {}),
-        })
+        messages.append(
+            {
+                "role": "assistant",
+                "content": text or "",
+                **(
+                    {"reasoning_content": reasoning_content}
+                    if reasoning_content
+                    else {}
+                ),
+                **({"tool_calls": openai_tool_calls} if openai_tool_calls else {}),
+            }
+        )
 
         # Execute tool calls; append role=tool messages
         for tu in tool_uses:
@@ -1289,11 +1459,13 @@ async def _run_openai_loop(
             except Exception as e:
                 result_text = f"Tool '{name}' failed: {e}"
                 yield {"type": "error", "text": result_text}
-            messages.append({
-                "role": "tool",
-                "tool_call_id": tu["id"],
-                "content": result_text or "",
-            })
+            messages.append(
+                {
+                    "role": "tool",
+                    "tool_call_id": tu["id"],
+                    "content": result_text or "",
+                }
+            )
 
         # Legacy <<TOOL>>: append as a user message
         legacy_results: list[str] = []

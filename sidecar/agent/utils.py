@@ -1,4 +1,5 @@
 """Shared utility functions for the sidecar agent."""
+
 from __future__ import annotations
 
 import secrets

@@ -4,6 +4,7 @@ zWork can use stdio MCP servers listed in ``~/.zwork/mcp.json`` using the
 Claude Desktop config shape. Each server tool is exposed to the model as
 ``mcp__<server>__<tool>`` and routed back through the manager.
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -61,9 +62,17 @@ def load_config(path: Optional[Path] = None) -> list[MCPServerSpec]:
         args_raw = entry.get("args") or []
         env_raw = entry.get("env") or {}
         args = [str(a) for a in args_raw] if isinstance(args_raw, list) else []
-        env = {str(k): str(v) for k, v in env_raw.items()} if isinstance(env_raw, dict) else {}
+        env = (
+            {str(k): str(v) for k, v in env_raw.items()}
+            if isinstance(env_raw, dict)
+            else {}
+        )
         enabled = bool(entry.get("enabled", True))
-        out.append(MCPServerSpec(name=name, command=command, args=args, env=env, enabled=enabled))
+        out.append(
+            MCPServerSpec(
+                name=name, command=command, args=args, env=env, enabled=enabled
+            )
+        )
     return out
 
 
@@ -74,11 +83,11 @@ def prefixed_tool_name(server: str, tool: str) -> str:
 def split_tool_name(prefixed: str) -> Optional[tuple[str, str]]:
     if not prefixed.startswith(TOOL_PREFIX):
         return None
-    rest = prefixed[len(TOOL_PREFIX):]
+    rest = prefixed[len(TOOL_PREFIX) :]
     sep = rest.find("__")
     if sep <= 0 or sep >= len(rest) - 2:
         return None
-    return rest[:sep], rest[sep + 2:]
+    return rest[:sep], rest[sep + 2 :]
 
 
 class _Session:
@@ -122,7 +131,9 @@ class _Session:
 
         env = dict(os.environ)
         env.update(self.spec.env)
-        params = StdioServerParameters(command=self.spec.command, args=self.spec.args, env=env)
+        params = StdioServerParameters(
+            command=self.spec.command, args=self.spec.args, env=env
+        )
         try:
             async with stdio_client(params) as (read, write):
                 async with ClientSession(read, write) as session:
@@ -148,10 +159,17 @@ class _Session:
                             result = await session.call_tool(name, arguments=args)
                             future.set_result(_serialize_call_result(result))
                         except Exception as e:
-                            future.set_result({
-                                "isError": True,
-                                "content": [{"type": "text", "text": f"{type(e).__name__}: {e}"}],
-                            })
+                            future.set_result(
+                                {
+                                    "isError": True,
+                                    "content": [
+                                        {
+                                            "type": "text",
+                                            "text": f"{type(e).__name__}: {e}",
+                                        }
+                                    ],
+                                }
+                            )
         except Exception as e:
             self.error = f"failed to start MCP server {self.spec.name!r}: {e}"
             log.warning(self.error)
@@ -185,20 +203,24 @@ class MCPManager:
             await sess.start()
 
     async def stop(self) -> None:
-        await asyncio.gather(*(s.stop() for s in self._sessions.values()), return_exceptions=True)
+        await asyncio.gather(
+            *(s.stop() for s in self._sessions.values()), return_exceptions=True
+        )
         self._sessions.clear()
 
     def status(self) -> list[dict]:
         rows: list[dict] = []
         for name, sess in self._sessions.items():
-            rows.append({
-                "name": name,
-                "command": sess.spec.command,
-                "args": list(sess.spec.args),
-                "ready": sess.ready.is_set() and not sess.error,
-                "error": sess.error,
-                "tool_count": len(sess.tools),
-            })
+            rows.append(
+                {
+                    "name": name,
+                    "command": sess.spec.command,
+                    "args": list(sess.spec.args),
+                    "ready": sess.ready.is_set() and not sess.error,
+                    "error": sess.error,
+                    "tool_count": len(sess.tools),
+                }
+            )
         return rows
 
     def all_tool_schemas(self) -> list[dict]:
@@ -207,21 +229,32 @@ class MCPManager:
             if sess.error or not sess.ready.is_set():
                 continue
             for t in sess.tools:
-                out.append({
-                    "name": prefixed_tool_name(name, t["name"]),
-                    "description": t["description"] or f"MCP tool {t['name']} on {name}",
-                    "parameters": t["input_schema"],
-                })
+                out.append(
+                    {
+                        "name": prefixed_tool_name(name, t["name"]),
+                        "description": t["description"]
+                        or f"MCP tool {t['name']} on {name}",
+                        "parameters": t["input_schema"],
+                    }
+                )
         return out
 
     async def call_tool(self, prefixed_name: str, args: dict) -> dict:
         parts = split_tool_name(prefixed_name)
         if not parts:
-            return {"isError": True, "content": [{"type": "text", "text": f"not an MCP tool name: {prefixed_name}"}]}
+            return {
+                "isError": True,
+                "content": [
+                    {"type": "text", "text": f"not an MCP tool name: {prefixed_name}"}
+                ],
+            }
         server, tool = parts
         sess = self._sessions.get(server)
         if not sess:
-            return {"isError": True, "content": [{"type": "text", "text": f"unknown MCP server: {server}"}]}
+            return {
+                "isError": True,
+                "content": [{"type": "text", "text": f"unknown MCP server: {server}"}],
+            }
         return await sess.call_tool(tool, args)
 
 

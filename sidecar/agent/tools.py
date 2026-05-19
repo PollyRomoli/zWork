@@ -506,7 +506,7 @@ async def execute_tool(tool_name: str, params: dict[str, Any]) -> AsyncIterator[
         return
 
     if tool_name.startswith("composio__"):
-        label = f"App: {tool_name[len('composio__'):].replace('_', ' ').title()}"
+        label = f"App: {tool_name[len('composio__') :].replace('_', ' ').title()}"
         yield {
             "type": "activity",
             "id": tool_id,
@@ -1335,18 +1335,53 @@ async def execute_tool(tool_name: str, params: dict[str, Any]) -> AsyncIterator[
         if style not in ("apa", "mla", "chicago"):
             style = "apa"
         label = f"Format citation ({style})"
-        yield {"type": "activity", "id": tool_id, "label": label, "icon": "file", "done": False}
+        yield {
+            "type": "activity",
+            "id": tool_id,
+            "label": label,
+            "icon": "file",
+            "done": False,
+        }
         try:
             citation = academic_mod.format_citation(paper_json, style)
-            yield {"type": "activity", "id": tool_id, "label": label, "icon": "file", "done": True}
+            yield {
+                "type": "activity",
+                "id": tool_id,
+                "label": label,
+                "icon": "file",
+                "done": True,
+            }
             if run is not None:
-                run.log("tool_finished", tool_name=tool_name, ok=True, output=citation[:200])
-            yield {"type": "tool_result", "tool": tool_name, "ok": True, "message": citation}
+                run.log(
+                    "tool_finished", tool_name=tool_name, ok=True, output=citation[:200]
+                )
+            yield {
+                "type": "tool_result",
+                "tool": tool_name,
+                "ok": True,
+                "message": citation,
+            }
         except Exception as e:
-            yield {"type": "activity", "id": tool_id, "label": f"Failed: {label}", "icon": "file", "done": True}
+            yield {
+                "type": "activity",
+                "id": tool_id,
+                "label": f"Failed: {label}",
+                "icon": "file",
+                "done": True,
+            }
             if run is not None:
-                run.log("tool_finished", tool_name=tool_name, ok=False, output=_friendly_error(e))
-            yield {"type": "tool_result", "tool": tool_name, "ok": False, "message": _friendly_error(e)}
+                run.log(
+                    "tool_finished",
+                    tool_name=tool_name,
+                    ok=False,
+                    output=_friendly_error(e),
+                )
+            yield {
+                "type": "tool_result",
+                "tool": tool_name,
+                "ok": False,
+                "message": _friendly_error(e),
+            }
         return
 
     if run is not None:

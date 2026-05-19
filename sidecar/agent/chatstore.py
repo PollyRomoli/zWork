@@ -1,4 +1,5 @@
 """Minimal chat persistence — one JSON file per chat under ~/.zwork/chats/."""
+
 from __future__ import annotations
 
 import json
@@ -54,15 +55,17 @@ def list_all() -> list[dict[str, Any]]:
     for p in chats_dir().glob("*.json"):
         try:
             d = json.loads(p.read_text(encoding="utf-8"))
-            out.append({
-                "id": d["id"],
-                "title": d.get("title", "Untitled"),
-                "created_at": d.get("created_at", 0),
-                "updated_at": d.get("updated_at", 0),
-                "message_count": len(d.get("messages") or []),
-                "model": d.get("model", ""),
-                "project_id": d.get("project_id", ""),
-            })
+            out.append(
+                {
+                    "id": d["id"],
+                    "title": d.get("title", "Untitled"),
+                    "created_at": d.get("created_at", 0),
+                    "updated_at": d.get("updated_at", 0),
+                    "message_count": len(d.get("messages") or []),
+                    "model": d.get("model", ""),
+                    "project_id": d.get("project_id", ""),
+                }
+            )
         except Exception:
             continue
     out.sort(key=lambda x: x["updated_at"], reverse=True)

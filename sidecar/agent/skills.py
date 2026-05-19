@@ -11,6 +11,7 @@ We walk the tree to find every SKILL.md, parse the frontmatter, and expose:
 The agent sees the short list in its system prompt, and can call the
 `read_skill` tool to load the full instructions on-demand.
 """
+
 from __future__ import annotations
 
 import re
@@ -24,10 +25,10 @@ from .home import skills_dir
 
 @dataclass
 class SkillMeta:
-    slug: str            # unique local id (folder path, slash-joined)
-    name: str            # display name
-    description: str     # 1-line summary
-    path: str            # absolute path to SKILL.md
+    slug: str  # unique local id (folder path, slash-joined)
+    name: str  # display name
+    description: str  # 1-line summary
+    path: str  # absolute path to SKILL.md
 
 
 # ----- Frontmatter parsing (lightweight; no pyyaml dependency) -----
@@ -103,7 +104,7 @@ def _discover(root: Path) -> list[SkillMeta]:
 def _first_paragraph(text: str) -> str:
     # Skip frontmatter if present
     m = _FRONTMATTER_RE.match(text)
-    body = text[m.end():] if m else text
+    body = text[m.end() :] if m else text
     # Strip leading headings and blank lines, grab first paragraph
     lines: list[str] = []
     for line in body.splitlines():
