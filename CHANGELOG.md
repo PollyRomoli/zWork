@@ -2,7 +2,15 @@
 
 All notable changes to zWork are documented here.
 
-## v0.3.18-beta.9
+## v0.4.0-alpha.2
+
+**Hotfix: backend crash loop on fresh install / OAuth redirect.**
+
+- fixed backend process manager killing healthy backends via `fuser -k` on every respawn — now only cleans stale processes at app startup
+- added lock-guarded re-check of backend health after acquiring mutex to prevent concurrent threads from killing a freshly spawned backend
+- added 5-second grace period for newly spawned backends so Uvicorn has time to bind before health checks trigger a kill
+
+## v0.4.0-alpha.1
 
 **Critical regression fixes: backend stability, keychain, onboarding, plan UX.**
 

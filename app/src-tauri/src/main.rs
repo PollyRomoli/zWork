@@ -6,7 +6,7 @@ use std::net::{Shutdown, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
 use std::sync::Mutex;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tauri::{Manager, RunEvent};
 use tauri_plugin_process::init as process_init;
 use tauri_plugin_shell::process::{CommandChild, CommandEvent};
@@ -39,8 +39,15 @@ impl BackendChild {
     }
 }
 
+struct BackendState {
+    child: Option<BackendChild>,
+    /// When the current child was last spawned. Used to avoid killing a
+    /// freshly started backend before it has time to bind to the port.
+    spawned_at: Option<Instant>,
+}
+
 /// Managed handle to the Python or packaged backend process.
-struct Backend(Mutex<Option<BackendChild>>);
+struct Backend(Mutex<BackendState>);
 
 fn zwork_data_dir() -> PathBuf {
     if let Ok(v) = std::env::var("ZWORK_HOME") {
@@ -240,8 +247,8 @@ fn start_packaged_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
                 append_log(&format!("Packaged backend output stream closed pid={pid}"));
                 if let Some(backend) = app_handle.try_state::<Backend>() {
                     if let Ok(mut guard) = backend.0.lock() {
-                        if guard.as_ref().map(|child| child.pid()) == Some(pid) {
-                            *guard = None;
+                        if guard.child.as_ref().map(|c| c.pid()) == Some(pid) {
+                            guard.child = None;
                         }
                     }
                 }
@@ -339,12 +346,20 @@ fn kill_stale_on_port(port: u16) {
     std::thread::sleep(Duration::from_millis(300));
 }
 
+/// Spawn a backend without cleaning the port. Used during normal operation
+/// where the previous child is shut down via its PID before calling this.
 fn spawn_backend(app: &tauri::AppHandle) -> Option<BackendChild> {
-    kill_stale_on_port(8787);
     if let Some(child) = start_packaged_backend(app) {
         return Some(child);
     }
     start_dev_backend()
+}
+
+/// Initial spawn at app startup: clean up any leftover backend from a
+/// previous run before starting a fresh one.
+fn spawn_backend_initial(app: &tauri::AppHandle) -> Option<BackendChild> {
+    kill_stale_on_port(8787);
+    spawn_backend(app)
 }
 
 fn ensure_backend_running(app: &tauri::AppHandle, backend: &Backend) -> Result<bool, String> {
@@ -356,15 +371,32 @@ fn ensure_backend_running(app: &tauri::AppHandle, backend: &Backend) -> Result<b
         .0
         .lock()
         .map_err(|_| "backend state lock poisoned".to_string())?;
-    if let Some(child) = guard.take() {
+
+    // Re-check after acquiring the lock — another thread may have spawned
+    // a healthy backend while we were waiting.
+    if backend_http_healthy() {
+        return Ok(true);
+    }
+
+    // Don't kill a freshly spawned backend before it has time to bind.
+    if let Some(spawned_at) = guard.spawned_at {
+        if spawned_at.elapsed() < Duration::from_secs(5) {
+            return Ok(false);
+        }
+    }
+
+    if let Some(child) = guard.child.take() {
         append_log(&format!(
             "Backend health check failed; stopping stale pid={}",
             child.pid()
         ));
         child.shutdown();
     }
-    *guard = spawn_backend(app);
-    Ok(guard.is_some())
+    guard.child = spawn_backend(app);
+    if guard.child.is_some() {
+        guard.spawned_at = Some(Instant::now());
+    }
+    Ok(guard.child.is_some())
 }
 
 fn start_backend_watchdog(app: tauri::AppHandle) {
@@ -415,11 +447,16 @@ fn restart_backend(app: tauri::AppHandle, backend: tauri::State<Backend>) -> Res
         .0
         .lock()
         .map_err(|_| "backend state lock poisoned".to_string())?;
-    if let Some(child) = guard.take() {
+    if let Some(child) = guard.child.take() {
         child.shutdown();
     }
-    *guard = spawn_backend(&app);
-    Ok(guard.is_some())
+    // Give the killed process a moment to release the port.
+    std::thread::sleep(Duration::from_millis(300));
+    guard.child = spawn_backend(&app);
+    if guard.child.is_some() {
+        guard.spawned_at = Some(Instant::now());
+    }
+    Ok(guard.child.is_some())
 }
 
 #[tauri::command]
@@ -638,14 +675,17 @@ fn main() {
             restart_backend,
             begin_desktop_auth
         ])
-        .manage(Backend(Mutex::new(None)))
+        .manage(Backend(Mutex::new(BackendState { child: None, spawned_at: None })))
         .build(tauri::generate_context!())
         .expect("error while building zWork");
 
     let app_handle = app.handle().clone();
     if let Some(backend) = app_handle.try_state::<Backend>() {
         if let Ok(mut guard) = backend.0.lock() {
-            *guard = spawn_backend(&app_handle);
+            guard.child = spawn_backend_initial(&app_handle);
+            if guard.child.is_some() {
+                guard.spawned_at = Some(Instant::now());
+            }
         }
     }
     start_backend_watchdog(app_handle.clone());
@@ -654,7 +694,7 @@ fn main() {
         if matches!(event, RunEvent::ExitRequested { .. } | RunEvent::Exit) {
             if let Some(backend) = app_handle.try_state::<Backend>() {
                 if let Ok(mut guard) = backend.0.lock() {
-                    if let Some(child) = guard.take() {
+                    if let Some(child) = guard.child.take() {
                         child.shutdown();
                         eprintln!("[zwork] backend stopped");
                     }
